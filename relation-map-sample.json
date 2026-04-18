@@ -1,0 +1,1914 @@
+{
+  "nodes": [
+    {
+      "id": 1,
+      "name": "鈴木 颯太",
+      "dataUrl": ""
+    },
+    {
+      "id": 2,
+      "name": "鈴木 颯",
+      "dataUrl": ""
+    },
+    {
+      "id": 3,
+      "name": "阿部 陽翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 4,
+      "name": "斎藤 碧",
+      "dataUrl": ""
+    },
+    {
+      "id": 5,
+      "name": "坂本 陽菜",
+      "dataUrl": ""
+    },
+    {
+      "id": 6,
+      "name": "遠藤 悠人",
+      "dataUrl": ""
+    },
+    {
+      "id": 7,
+      "name": "前田 奈々",
+      "dataUrl": ""
+    },
+    {
+      "id": 8,
+      "name": "佐々木 陸",
+      "dataUrl": ""
+    },
+    {
+      "id": 9,
+      "name": "斎藤 蒼",
+      "dataUrl": ""
+    },
+    {
+      "id": 10,
+      "name": "井上 七海",
+      "dataUrl": ""
+    },
+    {
+      "id": 11,
+      "name": "高橋 涼香",
+      "dataUrl": ""
+    },
+    {
+      "id": 12,
+      "name": "西村 蓮",
+      "dataUrl": ""
+    },
+    {
+      "id": 13,
+      "name": "佐々木 颯太",
+      "dataUrl": ""
+    },
+    {
+      "id": 14,
+      "name": "加藤 茉莉",
+      "dataUrl": ""
+    },
+    {
+      "id": 15,
+      "name": "中村 律",
+      "dataUrl": ""
+    },
+    {
+      "id": 16,
+      "name": "佐藤 莉子",
+      "dataUrl": ""
+    },
+    {
+      "id": 17,
+      "name": "阿部 詩音",
+      "dataUrl": ""
+    },
+    {
+      "id": 18,
+      "name": "森 直樹",
+      "dataUrl": ""
+    },
+    {
+      "id": 19,
+      "name": "清水 七海",
+      "dataUrl": ""
+    },
+    {
+      "id": 20,
+      "name": "阿部 杏",
+      "dataUrl": ""
+    },
+    {
+      "id": 21,
+      "name": "佐々木 健太",
+      "dataUrl": ""
+    },
+    {
+      "id": 22,
+      "name": "渡辺 詩音",
+      "dataUrl": ""
+    },
+    {
+      "id": 23,
+      "name": "林 彩",
+      "dataUrl": ""
+    },
+    {
+      "id": 24,
+      "name": "佐々木 翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 25,
+      "name": "福田 奈々",
+      "dataUrl": ""
+    },
+    {
+      "id": 26,
+      "name": "長谷川 茉莉",
+      "dataUrl": ""
+    },
+    {
+      "id": 27,
+      "name": "清水 陽翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 28,
+      "name": "後藤 悠人",
+      "dataUrl": ""
+    },
+    {
+      "id": 29,
+      "name": "松本 翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 30,
+      "name": "伊藤 悠斗",
+      "dataUrl": ""
+    },
+    {
+      "id": 31,
+      "name": "後藤 陽翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 32,
+      "name": "橋本 紫苑",
+      "dataUrl": ""
+    },
+    {
+      "id": 33,
+      "name": "佐々木 七海",
+      "dataUrl": ""
+    },
+    {
+      "id": 34,
+      "name": "森 悠人",
+      "dataUrl": ""
+    },
+    {
+      "id": 35,
+      "name": "森 大和",
+      "dataUrl": ""
+    },
+    {
+      "id": 36,
+      "name": "藤井 莉子",
+      "dataUrl": ""
+    },
+    {
+      "id": 37,
+      "name": "佐々木 彩",
+      "dataUrl": ""
+    },
+    {
+      "id": 38,
+      "name": "近藤 健太",
+      "dataUrl": ""
+    },
+    {
+      "id": 39,
+      "name": "山崎 颯太",
+      "dataUrl": ""
+    },
+    {
+      "id": 40,
+      "name": "岡田 大和",
+      "dataUrl": ""
+    },
+    {
+      "id": 41,
+      "name": "藤田 海斗",
+      "dataUrl": ""
+    },
+    {
+      "id": 42,
+      "name": "高橋 柚希",
+      "dataUrl": ""
+    },
+    {
+      "id": 43,
+      "name": "山口 杏",
+      "dataUrl": ""
+    },
+    {
+      "id": 44,
+      "name": "長谷川 奈々",
+      "dataUrl": ""
+    },
+    {
+      "id": 45,
+      "name": "鈴木 詩音",
+      "dataUrl": ""
+    },
+    {
+      "id": 46,
+      "name": "坂本 美咲",
+      "dataUrl": ""
+    },
+    {
+      "id": 47,
+      "name": "前田 健太",
+      "dataUrl": ""
+    },
+    {
+      "id": 48,
+      "name": "木村 律",
+      "dataUrl": ""
+    },
+    {
+      "id": 49,
+      "name": "前田 蓮",
+      "dataUrl": ""
+    },
+    {
+      "id": 50,
+      "name": "清水 心春",
+      "dataUrl": ""
+    },
+    {
+      "id": 51,
+      "name": "藤田 美咲",
+      "dataUrl": ""
+    },
+    {
+      "id": 52,
+      "name": "石井 さくら",
+      "dataUrl": ""
+    },
+    {
+      "id": 53,
+      "name": "高橋 朝陽",
+      "dataUrl": ""
+    },
+    {
+      "id": 54,
+      "name": "渡辺 莉子",
+      "dataUrl": ""
+    },
+    {
+      "id": 55,
+      "name": "遠藤 律",
+      "dataUrl": ""
+    },
+    {
+      "id": 56,
+      "name": "山田 七海",
+      "dataUrl": ""
+    },
+    {
+      "id": 57,
+      "name": "斎藤 詩音",
+      "dataUrl": ""
+    },
+    {
+      "id": 58,
+      "name": "田中 颯",
+      "dataUrl": ""
+    },
+    {
+      "id": 59,
+      "name": "山口 美咲",
+      "dataUrl": ""
+    },
+    {
+      "id": 60,
+      "name": "橋本 陽菜",
+      "dataUrl": ""
+    },
+    {
+      "id": 61,
+      "name": "山口 樹",
+      "dataUrl": ""
+    },
+    {
+      "id": 62,
+      "name": "三浦 律",
+      "dataUrl": ""
+    },
+    {
+      "id": 63,
+      "name": "岡田 朝陽",
+      "dataUrl": ""
+    },
+    {
+      "id": 64,
+      "name": "青木 さくら",
+      "dataUrl": ""
+    },
+    {
+      "id": 65,
+      "name": "青木 杏",
+      "dataUrl": ""
+    },
+    {
+      "id": 66,
+      "name": "後藤 颯太",
+      "dataUrl": ""
+    },
+    {
+      "id": 67,
+      "name": "松本 悠斗",
+      "dataUrl": ""
+    },
+    {
+      "id": 68,
+      "name": "三浦 陽翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 69,
+      "name": "加藤 花",
+      "dataUrl": ""
+    },
+    {
+      "id": 70,
+      "name": "長谷川 蓮",
+      "dataUrl": ""
+    },
+    {
+      "id": 71,
+      "name": "近藤 蓮",
+      "dataUrl": ""
+    },
+    {
+      "id": 72,
+      "name": "吉田 大輝",
+      "dataUrl": ""
+    },
+    {
+      "id": 73,
+      "name": "坂本 朝陽",
+      "dataUrl": ""
+    },
+    {
+      "id": 74,
+      "name": "後藤 蒼",
+      "dataUrl": ""
+    },
+    {
+      "id": 75,
+      "name": "橋本 湊",
+      "dataUrl": ""
+    },
+    {
+      "id": 76,
+      "name": "松本 朝陽",
+      "dataUrl": ""
+    },
+    {
+      "id": 77,
+      "name": "清水 悠人",
+      "dataUrl": ""
+    },
+    {
+      "id": 78,
+      "name": "渡辺 杏",
+      "dataUrl": ""
+    },
+    {
+      "id": 79,
+      "name": "高橋 結衣",
+      "dataUrl": ""
+    },
+    {
+      "id": 80,
+      "name": "遠藤 湊",
+      "dataUrl": ""
+    },
+    {
+      "id": 81,
+      "name": "林 さくら",
+      "dataUrl": ""
+    },
+    {
+      "id": 82,
+      "name": "近藤 悠斗",
+      "dataUrl": ""
+    },
+    {
+      "id": 83,
+      "name": "木村 直樹",
+      "dataUrl": ""
+    },
+    {
+      "id": 84,
+      "name": "前田 陽菜",
+      "dataUrl": ""
+    },
+    {
+      "id": 85,
+      "name": "渡辺 海斗",
+      "dataUrl": ""
+    },
+    {
+      "id": 86,
+      "name": "阿部 蓮",
+      "dataUrl": ""
+    },
+    {
+      "id": 87,
+      "name": "藤井 詩音",
+      "dataUrl": ""
+    },
+    {
+      "id": 88,
+      "name": "青木 茉莉",
+      "dataUrl": ""
+    },
+    {
+      "id": 89,
+      "name": "井上 陽菜",
+      "dataUrl": ""
+    },
+    {
+      "id": 90,
+      "name": "橋本 蓮",
+      "dataUrl": ""
+    },
+    {
+      "id": 91,
+      "name": "佐藤 大和",
+      "dataUrl": ""
+    },
+    {
+      "id": 92,
+      "name": "石川 彩",
+      "dataUrl": ""
+    },
+    {
+      "id": 93,
+      "name": "岡田 勇気",
+      "dataUrl": ""
+    },
+    {
+      "id": 94,
+      "name": "青木 翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 95,
+      "name": "佐藤 翔",
+      "dataUrl": ""
+    },
+    {
+      "id": 96,
+      "name": "渡辺 勇気",
+      "dataUrl": ""
+    },
+    {
+      "id": 97,
+      "name": "佐々木 直樹",
+      "dataUrl": ""
+    },
+    {
+      "id": 98,
+      "name": "藤井 さくら",
+      "dataUrl": ""
+    },
+    {
+      "id": 99,
+      "name": "佐々木 千夏",
+      "dataUrl": ""
+    },
+    {
+      "id": 100,
+      "name": "藤井 涼香",
+      "dataUrl": ""
+    }
+  ],
+  "links": [
+    {
+      "id": 1,
+      "source": 1,
+      "target": 20,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 2,
+      "source": 1,
+      "target": 24,
+      "label": "知人"
+    },
+    {
+      "id": 3,
+      "source": 1,
+      "target": 38,
+      "label": "指導者"
+    },
+    {
+      "id": 4,
+      "source": 1,
+      "target": 47,
+      "label": "恋人"
+    },
+    {
+      "id": 5,
+      "source": 1,
+      "target": 92,
+      "label": "ライバル"
+    },
+    {
+      "id": 6,
+      "source": 2,
+      "target": 15,
+      "label": "同僚"
+    },
+    {
+      "id": 7,
+      "source": 2,
+      "target": 43,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 8,
+      "source": 2,
+      "target": 48,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 9,
+      "source": 2,
+      "target": 93,
+      "label": "親友"
+    },
+    {
+      "id": 10,
+      "source": 2,
+      "target": 100,
+      "label": "知人"
+    },
+    {
+      "id": 11,
+      "source": 3,
+      "target": 39,
+      "label": "ライバル"
+    },
+    {
+      "id": 12,
+      "source": 3,
+      "target": 63,
+      "label": "同僚"
+    },
+    {
+      "id": 13,
+      "source": 3,
+      "target": 73,
+      "label": "師匠"
+    },
+    {
+      "id": 14,
+      "source": 3,
+      "target": 86,
+      "label": "宿敵"
+    },
+    {
+      "id": 15,
+      "source": 4,
+      "target": 28,
+      "label": "取引先"
+    },
+    {
+      "id": 16,
+      "source": 4,
+      "target": 84,
+      "label": "親子"
+    },
+    {
+      "id": 17,
+      "source": 5,
+      "target": 16,
+      "label": "友人"
+    },
+    {
+      "id": 18,
+      "source": 5,
+      "target": 34,
+      "label": "知人"
+    },
+    {
+      "id": 19,
+      "source": 5,
+      "target": 42,
+      "label": "恩人"
+    },
+    {
+      "id": 20,
+      "source": 5,
+      "target": 44,
+      "label": "チームメイト"
+    },
+    {
+      "id": 21,
+      "source": 6,
+      "target": 25,
+      "label": "支持者"
+    },
+    {
+      "id": 22,
+      "source": 6,
+      "target": 39,
+      "label": "隣人"
+    },
+    {
+      "id": 23,
+      "source": 6,
+      "target": 48,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 24,
+      "source": 6,
+      "target": 67,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 25,
+      "source": 6,
+      "target": 76,
+      "label": "協力者"
+    },
+    {
+      "id": 26,
+      "source": 7,
+      "target": 9,
+      "label": "指導者"
+    },
+    {
+      "id": 27,
+      "source": 7,
+      "target": 11,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 28,
+      "source": 7,
+      "target": 48,
+      "label": "協力者"
+    },
+    {
+      "id": 29,
+      "source": 7,
+      "target": 56,
+      "label": "姉妹"
+    },
+    {
+      "id": 30,
+      "source": 7,
+      "target": 64,
+      "label": "上司"
+    },
+    {
+      "id": 31,
+      "source": 8,
+      "target": 19,
+      "label": "部下"
+    },
+    {
+      "id": 32,
+      "source": 8,
+      "target": 20,
+      "label": "部下"
+    },
+    {
+      "id": 33,
+      "source": 8,
+      "target": 49,
+      "label": "知人"
+    },
+    {
+      "id": 34,
+      "source": 8,
+      "target": 75,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 35,
+      "source": 8,
+      "target": 77,
+      "label": "部下"
+    },
+    {
+      "id": 36,
+      "source": 9,
+      "target": 10,
+      "label": "上司"
+    },
+    {
+      "id": 37,
+      "source": 9,
+      "target": 35,
+      "label": "師匠"
+    },
+    {
+      "id": 38,
+      "source": 9,
+      "target": 40,
+      "label": "恋人"
+    },
+    {
+      "id": 39,
+      "source": 9,
+      "target": 57,
+      "label": "協力者"
+    },
+    {
+      "id": 40,
+      "source": 10,
+      "target": 23,
+      "label": "上司"
+    },
+    {
+      "id": 41,
+      "source": 10,
+      "target": 26,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 42,
+      "source": 10,
+      "target": 37,
+      "label": "支持者"
+    },
+    {
+      "id": 43,
+      "source": 10,
+      "target": 39,
+      "label": "元恋人"
+    },
+    {
+      "id": 44,
+      "source": 11,
+      "target": 3,
+      "label": "兄弟"
+    },
+    {
+      "id": 45,
+      "source": 11,
+      "target": 4,
+      "label": "友人"
+    },
+    {
+      "id": 46,
+      "source": 11,
+      "target": 15,
+      "label": "師匠"
+    },
+    {
+      "id": 47,
+      "source": 11,
+      "target": 24,
+      "label": "協力者"
+    },
+    {
+      "id": 48,
+      "source": 12,
+      "target": 5,
+      "label": "兄弟"
+    },
+    {
+      "id": 49,
+      "source": 12,
+      "target": 17,
+      "label": "親子"
+    },
+    {
+      "id": 50,
+      "source": 12,
+      "target": 34,
+      "label": "恩人"
+    },
+    {
+      "id": 51,
+      "source": 12,
+      "target": 46,
+      "label": "チームメイト"
+    },
+    {
+      "id": 52,
+      "source": 12,
+      "target": 55,
+      "label": "姉妹"
+    },
+    {
+      "id": 53,
+      "source": 13,
+      "target": 42,
+      "label": "兄弟"
+    },
+    {
+      "id": 54,
+      "source": 13,
+      "target": 69,
+      "label": "姉妹"
+    },
+    {
+      "id": 55,
+      "source": 14,
+      "target": 34,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 56,
+      "source": 14,
+      "target": 48,
+      "label": "師匠"
+    },
+    {
+      "id": 57,
+      "source": 14,
+      "target": 83,
+      "label": "協力者"
+    },
+    {
+      "id": 58,
+      "source": 15,
+      "target": 26,
+      "label": "姉妹"
+    },
+    {
+      "id": 59,
+      "source": 15,
+      "target": 34,
+      "label": "上司"
+    },
+    {
+      "id": 60,
+      "source": 15,
+      "target": 41,
+      "label": "親友"
+    },
+    {
+      "id": 61,
+      "source": 16,
+      "target": 48,
+      "label": "親子"
+    },
+    {
+      "id": 62,
+      "source": 16,
+      "target": 60,
+      "label": "親友"
+    },
+    {
+      "id": 63,
+      "source": 16,
+      "target": 63,
+      "label": "支持者"
+    },
+    {
+      "id": 64,
+      "source": 16,
+      "target": 73,
+      "label": "親友"
+    },
+    {
+      "id": 65,
+      "source": 17,
+      "target": 32,
+      "label": "親友"
+    },
+    {
+      "id": 66,
+      "source": 17,
+      "target": 45,
+      "label": "隣人"
+    },
+    {
+      "id": 67,
+      "source": 17,
+      "target": 49,
+      "label": "知人"
+    },
+    {
+      "id": 68,
+      "source": 17,
+      "target": 58,
+      "label": "部下"
+    },
+    {
+      "id": 69,
+      "source": 18,
+      "target": 31,
+      "label": "元恋人"
+    },
+    {
+      "id": 70,
+      "source": 18,
+      "target": 43,
+      "label": "チームメイト"
+    },
+    {
+      "id": 71,
+      "source": 18,
+      "target": 84,
+      "label": "親友"
+    },
+    {
+      "id": 72,
+      "source": 19,
+      "target": 30,
+      "label": "友人"
+    },
+    {
+      "id": 73,
+      "source": 19,
+      "target": 96,
+      "label": "姉妹"
+    },
+    {
+      "id": 74,
+      "source": 20,
+      "target": 44,
+      "label": "弟子"
+    },
+    {
+      "id": 75,
+      "source": 20,
+      "target": 53,
+      "label": "上司"
+    },
+    {
+      "id": 76,
+      "source": 21,
+      "target": 45,
+      "label": "支持者"
+    },
+    {
+      "id": 77,
+      "source": 21,
+      "target": 71,
+      "label": "親子"
+    },
+    {
+      "id": 78,
+      "source": 22,
+      "target": 35,
+      "label": "弟子"
+    },
+    {
+      "id": 79,
+      "source": 22,
+      "target": 42,
+      "label": "部下"
+    },
+    {
+      "id": 80,
+      "source": 23,
+      "target": 57,
+      "label": "友人"
+    },
+    {
+      "id": 81,
+      "source": 23,
+      "target": 62,
+      "label": "兄弟"
+    },
+    {
+      "id": 82,
+      "source": 23,
+      "target": 63,
+      "label": "協力者"
+    },
+    {
+      "id": 83,
+      "source": 23,
+      "target": 78,
+      "label": "姉妹"
+    },
+    {
+      "id": 84,
+      "source": 24,
+      "target": 26,
+      "label": "師匠"
+    },
+    {
+      "id": 85,
+      "source": 24,
+      "target": 27,
+      "label": "知人"
+    },
+    {
+      "id": 86,
+      "source": 24,
+      "target": 41,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 87,
+      "source": 25,
+      "target": 21,
+      "label": "親友"
+    },
+    {
+      "id": 88,
+      "source": 25,
+      "target": 39,
+      "label": "支持者"
+    },
+    {
+      "id": 89,
+      "source": 25,
+      "target": 53,
+      "label": "部下"
+    },
+    {
+      "id": 90,
+      "source": 25,
+      "target": 59,
+      "label": "ライバル"
+    },
+    {
+      "id": 91,
+      "source": 26,
+      "target": 22,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 92,
+      "source": 26,
+      "target": 32,
+      "label": "協力者"
+    },
+    {
+      "id": 93,
+      "source": 27,
+      "target": 38,
+      "label": "指導者"
+    },
+    {
+      "id": 94,
+      "source": 27,
+      "target": 52,
+      "label": "弟子"
+    },
+    {
+      "id": 95,
+      "source": 27,
+      "target": 60,
+      "label": "支持者"
+    },
+    {
+      "id": 96,
+      "source": 27,
+      "target": 93,
+      "label": "チームメイト"
+    },
+    {
+      "id": 97,
+      "source": 28,
+      "target": 62,
+      "label": "弟子"
+    },
+    {
+      "id": 98,
+      "source": 28,
+      "target": 68,
+      "label": "部下"
+    },
+    {
+      "id": 99,
+      "source": 28,
+      "target": 91,
+      "label": "指導者"
+    },
+    {
+      "id": 100,
+      "source": 29,
+      "target": 4,
+      "label": "姉妹"
+    },
+    {
+      "id": 101,
+      "source": 29,
+      "target": 54,
+      "label": "協力者"
+    },
+    {
+      "id": 102,
+      "source": 29,
+      "target": 70,
+      "label": "ライバル"
+    },
+    {
+      "id": 103,
+      "source": 30,
+      "target": 37,
+      "label": "部下"
+    },
+    {
+      "id": 104,
+      "source": 30,
+      "target": 79,
+      "label": "親友"
+    },
+    {
+      "id": 105,
+      "source": 31,
+      "target": 68,
+      "label": "保護者"
+    },
+    {
+      "id": 106,
+      "source": 31,
+      "target": 77,
+      "label": "親友"
+    },
+    {
+      "id": 107,
+      "source": 31,
+      "target": 78,
+      "label": "兄弟"
+    },
+    {
+      "id": 108,
+      "source": 31,
+      "target": 82,
+      "label": "隣人"
+    },
+    {
+      "id": 109,
+      "source": 32,
+      "target": 13,
+      "label": "支持者"
+    },
+    {
+      "id": 110,
+      "source": 32,
+      "target": 28,
+      "label": "チームメイト"
+    },
+    {
+      "id": 111,
+      "source": 32,
+      "target": 33,
+      "label": "友人"
+    },
+    {
+      "id": 112,
+      "source": 33,
+      "target": 13,
+      "label": "協力者"
+    },
+    {
+      "id": 113,
+      "source": 33,
+      "target": 19,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 114,
+      "source": 33,
+      "target": 47,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 115,
+      "source": 33,
+      "target": 51,
+      "label": "上司"
+    },
+    {
+      "id": 116,
+      "source": 34,
+      "target": 75,
+      "label": "支持者"
+    },
+    {
+      "id": 117,
+      "source": 35,
+      "target": 22,
+      "label": "恋人"
+    },
+    {
+      "id": 118,
+      "source": 35,
+      "target": 41,
+      "label": "宿敵"
+    },
+    {
+      "id": 119,
+      "source": 35,
+      "target": 64,
+      "label": "恩人"
+    },
+    {
+      "id": 120,
+      "source": 36,
+      "target": 99,
+      "label": "支持者"
+    },
+    {
+      "id": 121,
+      "source": 37,
+      "target": 13,
+      "label": "協力者"
+    },
+    {
+      "id": 122,
+      "source": 37,
+      "target": 55,
+      "label": "兄弟"
+    },
+    {
+      "id": 123,
+      "source": 37,
+      "target": 90,
+      "label": "保護者"
+    },
+    {
+      "id": 124,
+      "source": 38,
+      "target": 30,
+      "label": "親子"
+    },
+    {
+      "id": 125,
+      "source": 38,
+      "target": 73,
+      "label": "師匠"
+    },
+    {
+      "id": 126,
+      "source": 38,
+      "target": 93,
+      "label": "恩人"
+    },
+    {
+      "id": 127,
+      "source": 39,
+      "target": 57,
+      "label": "宿敵"
+    },
+    {
+      "id": 128,
+      "source": 40,
+      "target": 4,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 129,
+      "source": 40,
+      "target": 44,
+      "label": "取引先"
+    },
+    {
+      "id": 130,
+      "source": 41,
+      "target": 19,
+      "label": "部下"
+    },
+    {
+      "id": 131,
+      "source": 41,
+      "target": 49,
+      "label": "恋人"
+    },
+    {
+      "id": 132,
+      "source": 42,
+      "target": 58,
+      "label": "チームメイト"
+    },
+    {
+      "id": 133,
+      "source": 42,
+      "target": 80,
+      "label": "姉妹"
+    },
+    {
+      "id": 134,
+      "source": 43,
+      "target": 14,
+      "label": "ライバル"
+    },
+    {
+      "id": 135,
+      "source": 43,
+      "target": 18,
+      "label": "友人"
+    },
+    {
+      "id": 136,
+      "source": 43,
+      "target": 21,
+      "label": "師匠"
+    },
+    {
+      "id": 137,
+      "source": 44,
+      "target": 40,
+      "label": "隣人"
+    },
+    {
+      "id": 138,
+      "source": 44,
+      "target": 61,
+      "label": "姉妹"
+    },
+    {
+      "id": 139,
+      "source": 45,
+      "target": 59,
+      "label": "宿敵"
+    },
+    {
+      "id": 140,
+      "source": 45,
+      "target": 60,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 141,
+      "source": 45,
+      "target": 64,
+      "label": "ライバル"
+    },
+    {
+      "id": 142,
+      "source": 46,
+      "target": 47,
+      "label": "姉妹"
+    },
+    {
+      "id": 143,
+      "source": 46,
+      "target": 90,
+      "label": "協力者"
+    },
+    {
+      "id": 144,
+      "source": 47,
+      "target": 20,
+      "label": "協力者"
+    },
+    {
+      "id": 145,
+      "source": 47,
+      "target": 63,
+      "label": "隣人"
+    },
+    {
+      "id": 146,
+      "source": 49,
+      "target": 30,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 147,
+      "source": 49,
+      "target": 56,
+      "label": "協力者"
+    },
+    {
+      "id": 148,
+      "source": 50,
+      "target": 58,
+      "label": "親子"
+    },
+    {
+      "id": 149,
+      "source": 50,
+      "target": 67,
+      "label": "保護者"
+    },
+    {
+      "id": 150,
+      "source": 50,
+      "target": 85,
+      "label": "協力者"
+    },
+    {
+      "id": 151,
+      "source": 50,
+      "target": 91,
+      "label": "宿敵"
+    },
+    {
+      "id": 152,
+      "source": 51,
+      "target": 60,
+      "label": "宿敵"
+    },
+    {
+      "id": 153,
+      "source": 51,
+      "target": 63,
+      "label": "親子"
+    },
+    {
+      "id": 154,
+      "source": 51,
+      "target": 71,
+      "label": "姉妹"
+    },
+    {
+      "id": 155,
+      "source": 52,
+      "target": 78,
+      "label": "師匠"
+    },
+    {
+      "id": 156,
+      "source": 53,
+      "target": 55,
+      "label": "恋人"
+    },
+    {
+      "id": 157,
+      "source": 53,
+      "target": 65,
+      "label": "宿敵"
+    },
+    {
+      "id": 158,
+      "source": 54,
+      "target": 62,
+      "label": "支持者"
+    },
+    {
+      "id": 159,
+      "source": 55,
+      "target": 53,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 160,
+      "source": 55,
+      "target": 72,
+      "label": "同僚"
+    },
+    {
+      "id": 161,
+      "source": 56,
+      "target": 50,
+      "label": "協力者"
+    },
+    {
+      "id": 162,
+      "source": 56,
+      "target": 71,
+      "label": "隣人"
+    },
+    {
+      "id": 163,
+      "source": 56,
+      "target": 97,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 164,
+      "source": 57,
+      "target": 18,
+      "label": "恩人"
+    },
+    {
+      "id": 165,
+      "source": 57,
+      "target": 60,
+      "label": "知人"
+    },
+    {
+      "id": 166,
+      "source": 58,
+      "target": 87,
+      "label": "指導者"
+    },
+    {
+      "id": 167,
+      "source": 59,
+      "target": 71,
+      "label": "親子"
+    },
+    {
+      "id": 168,
+      "source": 59,
+      "target": 79,
+      "label": "師匠"
+    },
+    {
+      "id": 169,
+      "source": 59,
+      "target": 91,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 170,
+      "source": 61,
+      "target": 29,
+      "label": "指導者"
+    },
+    {
+      "id": 171,
+      "source": 61,
+      "target": 66,
+      "label": "ライバル"
+    },
+    {
+      "id": 172,
+      "source": 61,
+      "target": 71,
+      "label": "ライバル"
+    },
+    {
+      "id": 173,
+      "source": 61,
+      "target": 75,
+      "label": "チームメイト"
+    },
+    {
+      "id": 174,
+      "source": 62,
+      "target": 36,
+      "label": "師匠"
+    },
+    {
+      "id": 175,
+      "source": 62,
+      "target": 67,
+      "label": "弟子"
+    },
+    {
+      "id": 176,
+      "source": 64,
+      "target": 81,
+      "label": "同僚"
+    },
+    {
+      "id": 177,
+      "source": 65,
+      "target": 36,
+      "label": "兄弟"
+    },
+    {
+      "id": 178,
+      "source": 65,
+      "target": 54,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 179,
+      "source": 66,
+      "target": 14,
+      "label": "弟子"
+    },
+    {
+      "id": 180,
+      "source": 66,
+      "target": 69,
+      "label": "兄弟"
+    },
+    {
+      "id": 181,
+      "source": 67,
+      "target": 21,
+      "label": "姉妹"
+    },
+    {
+      "id": 182,
+      "source": 67,
+      "target": 40,
+      "label": "隣人"
+    },
+    {
+      "id": 183,
+      "source": 68,
+      "target": 58,
+      "label": "宿敵"
+    },
+    {
+      "id": 184,
+      "source": 68,
+      "target": 84,
+      "label": "部下"
+    },
+    {
+      "id": 185,
+      "source": 68,
+      "target": 100,
+      "label": "指導者"
+    },
+    {
+      "id": 186,
+      "source": 69,
+      "target": 75,
+      "label": "恋人"
+    },
+    {
+      "id": 187,
+      "source": 70,
+      "target": 46,
+      "label": "恩人"
+    },
+    {
+      "id": 188,
+      "source": 70,
+      "target": 88,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 189,
+      "source": 72,
+      "target": 52,
+      "label": "兄弟"
+    },
+    {
+      "id": 190,
+      "source": 72,
+      "target": 73,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 191,
+      "source": 72,
+      "target": 77,
+      "label": "知人"
+    },
+    {
+      "id": 192,
+      "source": 72,
+      "target": 90,
+      "label": "同僚"
+    },
+    {
+      "id": 193,
+      "source": 73,
+      "target": 29,
+      "label": "友人"
+    },
+    {
+      "id": 194,
+      "source": 76,
+      "target": 69,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 195,
+      "source": 76,
+      "target": 78,
+      "label": "宿敵"
+    },
+    {
+      "id": 196,
+      "source": 76,
+      "target": 93,
+      "label": "支持者"
+    },
+    {
+      "id": 197,
+      "source": 77,
+      "target": 65,
+      "label": "姉妹"
+    },
+    {
+      "id": 198,
+      "source": 77,
+      "target": 70,
+      "label": "親友"
+    },
+    {
+      "id": 199,
+      "source": 78,
+      "target": 80,
+      "label": "友人"
+    },
+    {
+      "id": 200,
+      "source": 79,
+      "target": 94,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 201,
+      "source": 79,
+      "target": 95,
+      "label": "指導者"
+    },
+    {
+      "id": 202,
+      "source": 80,
+      "target": 81,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 203,
+      "source": 81,
+      "target": 52,
+      "label": "チームメイト"
+    },
+    {
+      "id": 204,
+      "source": 81,
+      "target": 96,
+      "label": "恩人"
+    },
+    {
+      "id": 205,
+      "source": 81,
+      "target": 98,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 206,
+      "source": 82,
+      "target": 89,
+      "label": "取引先"
+    },
+    {
+      "id": 207,
+      "source": 83,
+      "target": 52,
+      "label": "弟子"
+    },
+    {
+      "id": 208,
+      "source": 83,
+      "target": 80,
+      "label": "ライバル"
+    },
+    {
+      "id": 209,
+      "source": 83,
+      "target": 93,
+      "label": "幼なじみ"
+    },
+    {
+      "id": 210,
+      "source": 84,
+      "target": 54,
+      "label": "隣人"
+    },
+    {
+      "id": 211,
+      "source": 84,
+      "target": 83,
+      "label": "同僚"
+    },
+    {
+      "id": 212,
+      "source": 85,
+      "target": 22,
+      "label": "宿敵"
+    },
+    {
+      "id": 213,
+      "source": 85,
+      "target": 89,
+      "label": "同僚"
+    },
+    {
+      "id": 214,
+      "source": 85,
+      "target": 90,
+      "label": "チームメイト"
+    },
+    {
+      "id": 215,
+      "source": 86,
+      "target": 69,
+      "label": "部下"
+    },
+    {
+      "id": 216,
+      "source": 86,
+      "target": 76,
+      "label": "弟子"
+    },
+    {
+      "id": 217,
+      "source": 86,
+      "target": 88,
+      "label": "部下"
+    },
+    {
+      "id": 218,
+      "source": 87,
+      "target": 82,
+      "label": "取引先"
+    },
+    {
+      "id": 219,
+      "source": 89,
+      "target": 46,
+      "label": "ライバル"
+    },
+    {
+      "id": 220,
+      "source": 89,
+      "target": 80,
+      "label": "部下"
+    },
+    {
+      "id": 221,
+      "source": 89,
+      "target": 92,
+      "label": "取引先"
+    },
+    {
+      "id": 222,
+      "source": 90,
+      "target": 36,
+      "label": "友人"
+    },
+    {
+      "id": 223,
+      "source": 91,
+      "target": 79,
+      "label": "支持者"
+    },
+    {
+      "id": 224,
+      "source": 91,
+      "target": 95,
+      "label": "指導者"
+    },
+    {
+      "id": 225,
+      "source": 92,
+      "target": 86,
+      "label": "ライバル"
+    },
+    {
+      "id": 226,
+      "source": 92,
+      "target": 87,
+      "label": "兄弟"
+    },
+    {
+      "id": 227,
+      "source": 94,
+      "target": 66,
+      "label": "支持者"
+    },
+    {
+      "id": 228,
+      "source": 94,
+      "target": 74,
+      "label": "上司"
+    },
+    {
+      "id": 229,
+      "source": 96,
+      "target": 54,
+      "label": "元恋人"
+    },
+    {
+      "id": 230,
+      "source": 97,
+      "target": 92,
+      "label": "恩人"
+    },
+    {
+      "id": 231,
+      "source": 97,
+      "target": 100,
+      "label": "兄弟"
+    },
+    {
+      "id": 232,
+      "source": 98,
+      "target": 66,
+      "label": "恋人"
+    },
+    {
+      "id": 233,
+      "source": 98,
+      "target": 82,
+      "label": "クラスメイト"
+    },
+    {
+      "id": 234,
+      "source": 98,
+      "target": 88,
+      "label": "隣人"
+    }
+  ],
+  "meta": {
+    "nextNodeId": 101,
+    "nextLinkId": 235
+  }
+}

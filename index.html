@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoRelationMap</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="/config.js"></script>
+</head>
+<body>
+  <!-- サイドパネル -->
+  <div id="sidebar">
+    <h2>AutoRelationMap</h2>
+
+    <section id="section-add">
+      <h3>人物を追加</h3>
+      <input type="text" id="input-name" placeholder="名前を入力" maxlength="30" />
+      <label class="file-label" for="input-icon">
+        <span id="icon-preview-label">アイコン画像を選択</span>
+        <input type="file" id="input-icon" accept="image/*" />
+      </label>
+      <canvas id="canvas-resize" style="display:none"></canvas>
+      <img id="icon-preview" alt="preview" style="display:none" />
+      <button id="btn-add-person">追加</button>
+    </section>
+
+    <hr />
+
+    <section id="section-json">
+      <h3>データ</h3>
+      <button id="btn-save">JSON 保存</button>
+      <label class="file-label" for="input-load">
+        JSON 読み込み
+        <input type="file" id="input-load" accept="application/json" />
+      </label>
+      <button id="btn-create-map">クラウドに保存して共有</button>
+    </section>
+
+    <section id="section-map-mode" class="hidden">
+      <h3>共有</h3>
+      <button id="btn-copy-share">共有リンクをコピー</button>
+      <span id="autosave-label">自動保存中</span>
+    </section>
+
+    <hr />
+
+    <section id="section-layout">
+      <h3>レイアウト</h3>
+      <button id="btn-relayout">自動整列</button>
+    </section>
+  </div>
+
+  <!-- メインキャンバス領域 -->
+  <div id="map-container">
+    <svg id="map-svg">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7"
+                refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
+        </marker>
+        <marker id="arrow-hover" markerWidth="10" markerHeight="7"
+                refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
+        </marker>
+        <marker id="arrow-out" markerWidth="10" markerHeight="7"
+                refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
+        </marker>
+        <marker id="arrow-in" markerWidth="10" markerHeight="7"
+                refX="10" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
+        </marker>
+      </defs>
+      <!-- D3 がここに要素を追加する -->
+    </svg>
+  </div>
+
+  <!-- 関係ラベル・名前入力モーダル -->
+  <div id="modal-overlay" class="hidden">
+    <div id="modal">
+      <h3 id="modal-title">関係を入力</h3>
+      <p id="modal-desc"></p>
+      <input type="text" id="modal-input" placeholder="例：友人、同僚、ライバル" maxlength="30" />
+      <div class="modal-buttons">
+        <button id="modal-cancel">キャンセル</button>
+        <button id="modal-ok">決定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- アイコン変更モーダル -->
+  <div id="modal-icon-overlay" class="hidden">
+    <div id="modal-icon">
+      <h3>アイコンを変更</h3>
+      <p id="modal-icon-desc"></p>
+      <label class="file-label" for="input-icon-change">
+        ファイルを選択
+        <input type="file" id="input-icon-change" accept="image/*" />
+      </label>
+      <button id="modal-icon-cancel">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- コンテキストメニュー（右クリック） -->
+  <div id="context-menu" class="hidden">
+    <ul>
+      <li id="ctx-edit-name">名前を変更</li>
+      <li id="ctx-edit-icon">アイコンを変更</li>
+      <li id="ctx-delete">削除</li>
+    </ul>
+  </div>
+
+  <!-- 右側詳細パネル -->
+  <div id="detail-panel">
+    <div id="detail-header">
+      <img id="detail-icon" alt="" />
+      <span id="detail-name"></span>
+      <button id="detail-close">✕</button>
+    </div>
+    <div id="detail-body">
+      <section id="detail-in">
+        <h4>← 入力</h4>
+        <ul id="detail-in-list"></ul>
+      </section>
+      <section id="detail-out">
+        <h4>→ 出力</h4>
+        <ul id="detail-out-list"></ul>
+      </section>
+    </div>
+  </div>
+
+  <!-- 通知モーダル（alert 代替） -->
+  <div id="notify-overlay" class="hidden">
+    <div id="notify-modal">
+      <p id="notify-message"></p>
+      <div class="modal-buttons">
+        <button id="notify-ok">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ツールチップ -->
+  <div id="tooltip" class="hidden"></div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="supabase-client.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
