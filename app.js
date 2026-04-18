@@ -988,6 +988,7 @@ window.addEventListener('resize', () => {
 const sb = window.sb ?? null;
 
 let mapId = null;
+let mapTitle = '無題マップ';
 let realtimeChannel = null;
 let realtimeReady = false;
 let broadcastQueue = [];
@@ -1018,11 +1019,15 @@ function updateMapModeUI() {
 }
 
 async function loadMapFromDB(id) {
-  const { data, error } = await sb.from('maps').select('data').eq('id', id).single();
+  const { data, error } = await sb.from('maps').select('title, data').eq('id', id).single();
   if (error || !data) {
     showNotify('マップが見つかりません');
     return;
   }
+  mapTitle = data.title ?? '無題マップ';
+  const titleInput = document.getElementById('input-map-title');
+  if (titleInput) titleInput.value = mapTitle;
+  document.title = `${mapTitle} - AutoRelationMap`;
   const mapData = data.data;
   nodes      = (mapData.nodes ?? []).map(n => ({ ...n, r: R_BASE }));
   links      = (mapData.links ?? []).map(l => ({ ...l }));
@@ -1048,7 +1053,7 @@ function buildSaveData() {
 async function saveMapToDB() {
   if (!isHosted()) return;
   await sb.from('maps')
-    .update({ data: buildSaveData(), updated_at: new Date().toISOString() })
+    .update({ title: mapTitle, data: buildSaveData(), updated_at: new Date().toISOString() })
     .eq('id', mapId);
 }
 
@@ -1176,6 +1181,12 @@ function copyShareLink() {
 
 document.getElementById('btn-create-map')?.addEventListener('click', createNewMap);
 document.getElementById('btn-copy-share')?.addEventListener('click', copyShareLink);
+
+document.getElementById('input-map-title')?.addEventListener('input', function () {
+  mapTitle = this.value.trim() || '無題マップ';
+  document.title = `${mapTitle} - AutoRelationMap`;
+  scheduleSave();
+});
 
 // ---- 初期化 ----
 getSvgSize();
