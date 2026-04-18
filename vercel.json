@@ -1,6 +1,6 @@
 {
   "rewrites": [
     { "source": "/config.js",  "destination": "/api/config" },
-    { "source": "/map/:path*", "destination": "/index.html" }
+    { "source": "/map/:id",    "destination": "/api/map/:id" }
   ]
 }
