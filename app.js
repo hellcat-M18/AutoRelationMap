@@ -989,6 +989,8 @@ const sb = window.sb ?? null;
 
 let mapId = null;
 let realtimeChannel = null;
+let realtimeReady = false;
+let broadcastQueue = [];
 let saveTimer = null;
 const CLIENT_ID = crypto.randomUUID();
 
@@ -1080,21 +1082,29 @@ async function createNewMap() {
 
 function subscribeRealtime(id) {
   if (realtimeChannel) sb.removeChannel(realtimeChannel);
+  realtimeReady = false;
   realtimeChannel = sb.channel(`map:${id}`)
     .on('broadcast', { event: 'op' }, ({ payload }) => {
       if (payload.clientId === CLIENT_ID) return;
       applyRemoteOp(payload);
     })
-    .subscribe();
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') {
+        realtimeReady = true;
+        broadcastQueue.forEach(item => realtimeChannel.send(item));
+        broadcastQueue = [];
+      }
+    });
 }
 
 function broadcastOp(op, data) {
   if (!realtimeChannel) return;
-  realtimeChannel.send({
-    type: 'broadcast',
-    event: 'op',
-    payload: { op, ...data, clientId: CLIENT_ID },
-  });
+  const msg = { type: 'broadcast', event: 'op', payload: { op, ...data, clientId: CLIENT_ID } };
+  if (realtimeReady) {
+    realtimeChannel.send(msg);
+  } else {
+    broadcastQueue.push(msg);
+  }
 }
 
 function applyRemoteOp(payload) {
