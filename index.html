@@ -140,6 +140,21 @@
     </div>
   </div>
 
+  <!-- クロップモーダル -->
+  <div id="modal-crop-overlay" class="hidden">
+    <div id="modal-crop">
+      <h3>切り取り範囲を選択</h3>
+      <p class="crop-hint">ドラッグで移動・コーナーをドラッグしてリサイズ</p>
+      <div id="crop-canvas-wrapper">
+        <canvas id="crop-canvas"></canvas>
+      </div>
+      <div class="modal-buttons">
+        <button id="crop-cancel">キャンセル</button>
+        <button id="crop-ok">決定</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ツールチップ -->
   <div id="tooltip" class="hidden"></div>
 

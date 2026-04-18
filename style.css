@@ -92,6 +92,60 @@ body {
   text-align: center;
 }
 
+/* ========== クロップモーダル ========== */
+#modal-crop-overlay {
+  position: fixed;
+  inset: 0;
+  background: #0009;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+#modal-crop-overlay.hidden { display: none; }
+
+#modal-crop {
+  background: #1a1a2e;
+  border-radius: 14px;
+  padding: 20px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+#modal-crop h3 {
+  color: #e8eef5;
+  font-size: 0.95rem;
+}
+.crop-hint {
+  font-size: 0.73rem;
+  color: #6688aa;
+}
+
+#crop-canvas-wrapper {
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+}
+
+#crop-canvas {
+  display: block;
+  border-radius: 6px;
+  cursor: crosshair;
+  max-width: 80vw;
+  max-height: 60vh;
+  object-fit: contain;
+}
+
+#crop-ok {
+  background: #1a6fa5;
+  color: #ffffff;
+  font-weight: bold;
+  padding: 7px 20px;
+}
+#crop-cancel { padding: 7px 20px; }
+
 /* ========== ユーティリティ ========== */
 .hidden { display: none !important; }
 

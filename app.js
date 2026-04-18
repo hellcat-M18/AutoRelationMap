@@ -746,26 +746,114 @@ function hideTooltip() {
   document.getElementById('tooltip').classList.add('hidden');
 }
 
-function resizeImage(file, callback) {
-  const reader = new FileReader();
-  reader.onload = loadEvent => {
-    const image = new Image();
-    image.onload = () => {
-      const canvas = document.getElementById('canvas-resize');
-      const context = canvas.getContext('2d');
-      const side = Math.min(image.width, image.height);
-      const sx = (image.width - side) / 2;
-      const sy = (image.height - side) / 2;
+// ============================================================
+//  クロップ機能
+// ============================================================
 
-      canvas.width = ICON_SIZE;
-      canvas.height = ICON_SIZE;
-      context.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
-      context.drawImage(image, sx, sy, side, side, 0, 0, ICON_SIZE, ICON_SIZE);
-      callback(canvas.toDataURL('image/png'));
+const CROP_MAX    = 400;
+const HANDLE_R    = 8;
+const MIN_CROP_SZ = 40;
+
+let cropImage        = null;
+let cropDisplayScale = 1;
+let cropRect         = { x: 0, y: 0, size: 0 };
+let cropDragState    = null;
+let cropCallback     = null;
+
+function openCropModal(file, callback) {
+  cropCallback = callback;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      cropImage = img;
+      initCropCanvas();
+      document.getElementById('modal-crop-overlay').classList.remove('hidden');
     };
-    image.src = loadEvent.target.result;
+    img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+function initCropCanvas() {
+  const canvas = document.getElementById('crop-canvas');
+  const img    = cropImage;
+  const scale  = Math.min(CROP_MAX / img.width, CROP_MAX / img.height, 1);
+  canvas.width  = Math.round(img.width  * scale);
+  canvas.height = Math.round(img.height * scale);
+  cropDisplayScale = scale;
+  const size = Math.min(canvas.width, canvas.height);
+  cropRect = { x: (canvas.width - size) / 2, y: (canvas.height - size) / 2, size };
+  renderCropCanvas();
+}
+
+function renderCropCanvas() {
+  const canvas = document.getElementById('crop-canvas');
+  const ctx    = canvas.getContext('2d');
+  const { x, y, size } = cropRect;
+
+  ctx.drawImage(cropImage, 0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, size, size);
+  ctx.clip();
+  ctx.drawImage(cropImage, 0, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth   = 1.5;
+  ctx.strokeRect(x + 0.75, y + 0.75, size - 1.5, size - 1.5);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth   = 0.75;
+  for (let i = 1; i < 3; i++) {
+    ctx.beginPath(); ctx.moveTo(x + size * i / 3, y);      ctx.lineTo(x + size * i / 3, y + size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,      y + size * i / 3); ctx.lineTo(x + size, y + size * i / 3); ctx.stroke();
+  }
+
+  cropCornerPositions().forEach(([cx, cy]) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, HANDLE_R, 0, Math.PI * 2);
+    ctx.fillStyle   = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = '#1a6fa5';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+  });
+}
+
+function cropCornerPositions() {
+  const { x, y, size } = cropRect;
+  return [[x, y], [x + size, y], [x, y + size], [x + size, y + size]];
+}
+
+function cropHitCorner(px, py) {
+  return cropCornerPositions().findIndex(([cx, cy]) => {
+    const dx = px - cx, dy = py - cy;
+    return dx * dx + dy * dy <= (HANDLE_R + 4) * (HANDLE_R + 4);
+  });
+}
+
+function cropInsideRect(px, py) {
+  return px >= cropRect.x && px <= cropRect.x + cropRect.size &&
+         py >= cropRect.y && py <= cropRect.y + cropRect.size;
+}
+
+function cropEventPos(e) {
+  const canvas = document.getElementById('crop-canvas');
+  const r = canvas.getBoundingClientRect();
+  return [
+    (e.clientX - r.left) * (canvas.width  / r.width),
+    (e.clientY - r.top)  * (canvas.height / r.height),
+  ];
+}
+
+function resizeImage(file, callback) {
+  openCropModal(file, callback);
 }
 
 document.getElementById('modal-ok').addEventListener('click', () => {
@@ -978,6 +1066,87 @@ window.addEventListener('resize', () => {
   getSvgSize();
   if (nodes.length === 0) return;
   fitView(0);
+});
+
+// ---- クロップモーダル イベント ----
+{
+  const cc = document.getElementById('crop-canvas');
+
+  cc.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const [px, py] = cropEventPos(e);
+    const ci = cropHitCorner(px, py);
+    if (ci >= 0) {
+      cropDragState = { type: 'corner', cornerIdx: ci, origRect: { ...cropRect } };
+    } else if (cropInsideRect(px, py)) {
+      cropDragState = { type: 'move', startX: px, startY: py, origRect: { ...cropRect } };
+    }
+  });
+
+  cc.addEventListener('mousemove', e => {
+    const [px, py] = cropEventPos(e);
+    const cw = cc.width, ch = cc.height;
+    if (!cropDragState) {
+      const ci = cropHitCorner(px, py);
+      cc.style.cursor = ci >= 0
+        ? ['nw-resize', 'ne-resize', 'sw-resize', 'se-resize'][ci]
+        : cropInsideRect(px, py) ? 'move' : 'crosshair';
+      return;
+    }
+    if (cropDragState.type === 'move') {
+      const dx = px - cropDragState.startX;
+      const dy = py - cropDragState.startY;
+      const s  = cropDragState.origRect.size;
+      cropRect.x = Math.max(0, Math.min(cw - s, cropDragState.origRect.x + dx));
+      cropRect.y = Math.max(0, Math.min(ch - s, cropDragState.origRect.y + dy));
+    } else {
+      const orig = cropDragState.origRect;
+      const fps  = [
+        [orig.x + orig.size, orig.y + orig.size],
+        [orig.x,             orig.y + orig.size],
+        [orig.x + orig.size, orig.y            ],
+        [orig.x,             orig.y            ],
+      ];
+      const [fx, fy] = fps[cropDragState.cornerIdx];
+      const calc = [
+        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(fx - px, fy - py)), fx,      fy     ); cropRect = { x: fx - s, y: fy - s, size: s }; },
+        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(px - fx, fy - py)), cw - fx, fy     ); cropRect = { x: fx,     y: fy - s, size: s }; },
+        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(fx - px, py - fy)), fx,      ch - fy); cropRect = { x: fx - s, y: fy,     size: s }; },
+        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(px - fx, py - fy)), cw - fx, ch - fy); cropRect = { x: fx,     y: fy,     size: s }; },
+      ];
+      calc[cropDragState.cornerIdx]();
+    }
+    renderCropCanvas();
+  });
+
+  const endCropDrag = () => { cropDragState = null; };
+  cc.addEventListener('mouseup',    endCropDrag);
+  cc.addEventListener('mouseleave', endCropDrag);
+}
+
+document.getElementById('crop-ok').addEventListener('click', () => {
+  document.getElementById('modal-crop-overlay').classList.add('hidden');
+  if (!cropCallback || !cropImage) return;
+  const canvas = document.getElementById('canvas-resize');
+  const ctx    = canvas.getContext('2d');
+  const srcX   = cropRect.x    / cropDisplayScale;
+  const srcY   = cropRect.y    / cropDisplayScale;
+  const srcS   = cropRect.size / cropDisplayScale;
+  canvas.width  = ICON_SIZE;
+  canvas.height = ICON_SIZE;
+  ctx.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+  ctx.drawImage(cropImage, srcX, srcY, srcS, srcS, 0, 0, ICON_SIZE, ICON_SIZE);
+  const dataUrl = canvas.toDataURL('image/png');
+  const cb = cropCallback;
+  cropCallback = null;
+  cropImage    = null;
+  cb(dataUrl);
+});
+
+document.getElementById('crop-cancel').addEventListener('click', () => {
+  document.getElementById('modal-crop-overlay').classList.add('hidden');
+  cropCallback = null;
+  cropImage    = null;
 });
 
 // ============================================================
