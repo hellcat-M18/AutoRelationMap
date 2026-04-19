@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  let title = 'AutoRelationMap';
+  let title = '無題マップ';
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -38,31 +38,32 @@ export default async function handler(req, res) {
         },
       }
     );
+    if (!resp.ok) throw new Error(`Supabase HTTP ${resp.status}`);
     const data = await resp.json();
     if (data?.[0]?.title) title = data[0].title;
-  } catch {
-    // タイトル取得失敗時はデフォルト値を使用
+  } catch (err) {
+    console.error('[OGP] title fetch failed:', err.message);
   }
 
   const siteUrl = `https://${req.headers.host}`;
   const pageUrl = `${siteUrl}/map/${id}`;
-  const fullTitle = `${escapeHtml(title)} - AutoRelationMap`;
-  const description = '相関図マップ';
+  const escapedTitle = escapeHtml(title);
+  const description = '相関図マップ | AutoRelationMap';
 
   const ogTags = `
-    <meta property="og:title" content="${fullTitle}" />
+    <meta property="og:title" content="${escapedTitle}" />
     <meta property="og:description" content="${description}" />
     <meta property="og:url" content="${escapeHtml(pageUrl)}" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="AutoRelationMap" />
     <meta name="twitter:card" content="${TWITTER_CARD}" />
-    <meta name="twitter:title" content="${fullTitle}" />
+    <meta name="twitter:title" content="${escapedTitle}" />
     <meta name="twitter:description" content="${description}" />`;
 
   // index.html を読み込んでタイトル + OGP タグを注入
   const indexPath = path.join(process.cwd(), 'index.html');
   let html = fs.readFileSync(indexPath, 'utf-8');
-  html = html.replace(/<title>.*?<\/title>/, `<title>${fullTitle}</title>`);
+  html = html.replace(/<title>.*?<\/title>/, `<title>${escapedTitle}</title>`);
   html = html.replace('</head>', `${ogTags}\n</head>`);
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
