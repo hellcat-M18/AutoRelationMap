@@ -56,9 +56,54 @@ const dragLine = mainGroup.append('line')
   .attr('id', 'drag-line')
   .attr('visibility', 'hidden');
 
+// 非対称リンクフォース: ターゲット（矢印の先）だけ引き寄せられ、ソースは動かない
+function forceAsymmetricLink() {
+  let _links = [];
+  let _distanceFn = () => 100;
+  let _strength = 0.25;
+
+  function force(alpha) {
+    _links.forEach(link => {
+      const source = getLinkSourceNode(link);
+      const target = getLinkTargetNode(link);
+      if (!source || !target || source === target) return;
+
+      const dx = (target.x + (target.vx || 0)) - (source.x + (source.vx || 0));
+      const dy = (target.y + (target.vy || 0)) - (source.y + (source.vy || 0));
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const desired = _distanceFn(link);
+      const k = (dist - desired) / dist * alpha * _strength;
+
+      // ターゲットのみ引き寄せる（ソースは動かさない）
+      target.vx -= dx * k;
+      target.vy -= dy * k;
+    });
+  }
+
+  force.links = function(l) {
+    if (!arguments.length) return _links;
+    _links = l;
+    return force;
+  };
+
+  force.distance = function(fn) {
+    if (!arguments.length) return _distanceFn;
+    _distanceFn = typeof fn === 'function' ? fn : () => +fn;
+    return force;
+  };
+
+  force.strength = function(s) {
+    if (!arguments.length) return _strength;
+    _strength = +s;
+    return force;
+  };
+
+  return force;
+}
+
 const simulation = d3.forceSimulation()
   .alphaDecay(0.0228)
-  .force('link', d3.forceLink().id(node => node.id).distance(link => {
+  .force('link', forceAsymmetricLink().distance(link => {
     const source = getLinkSourceNode(link);
     const target = getLinkTargetNode(link);
     return (source?.r ?? R_BASE) + (target?.r ?? R_BASE) + FORCE_LINK_GAP;
@@ -746,114 +791,26 @@ function hideTooltip() {
   document.getElementById('tooltip').classList.add('hidden');
 }
 
-// ============================================================
-//  クロップ機能
-// ============================================================
-
-const CROP_MAX    = 400;
-const HANDLE_R    = 8;
-const MIN_CROP_SZ = 40;
-
-let cropImage        = null;
-let cropDisplayScale = 1;
-let cropRect         = { x: 0, y: 0, size: 0 };
-let cropDragState    = null;
-let cropCallback     = null;
-
-function openCropModal(file, callback) {
-  cropCallback = callback;
+function resizeImage(file, callback) {
   const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
-      cropImage = img;
-      initCropCanvas();
-      document.getElementById('modal-crop-overlay').classList.remove('hidden');
+  reader.onload = loadEvent => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.getElementById('canvas-resize');
+      const context = canvas.getContext('2d');
+      const side = Math.min(image.width, image.height);
+      const sx = (image.width - side) / 2;
+      const sy = (image.height - side) / 2;
+
+      canvas.width = ICON_SIZE;
+      canvas.height = ICON_SIZE;
+      context.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
+      context.drawImage(image, sx, sy, side, side, 0, 0, ICON_SIZE, ICON_SIZE);
+      callback(canvas.toDataURL('image/png'));
     };
-    img.src = ev.target.result;
+    image.src = loadEvent.target.result;
   };
   reader.readAsDataURL(file);
-}
-
-function initCropCanvas() {
-  const canvas = document.getElementById('crop-canvas');
-  const img    = cropImage;
-  const scale  = Math.min(CROP_MAX / img.width, CROP_MAX / img.height, 1);
-  canvas.width  = Math.round(img.width  * scale);
-  canvas.height = Math.round(img.height * scale);
-  cropDisplayScale = scale;
-  const size = Math.min(canvas.width, canvas.height);
-  cropRect = { x: (canvas.width - size) / 2, y: (canvas.height - size) / 2, size };
-  renderCropCanvas();
-}
-
-function renderCropCanvas() {
-  const canvas = document.getElementById('crop-canvas');
-  const ctx    = canvas.getContext('2d');
-  const { x, y, size } = cropRect;
-
-  ctx.drawImage(cropImage, 0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, size, size);
-  ctx.clip();
-  ctx.drawImage(cropImage, 0, 0, canvas.width, canvas.height);
-  ctx.restore();
-
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth   = 1.5;
-  ctx.strokeRect(x + 0.75, y + 0.75, size - 1.5, size - 1.5);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth   = 0.75;
-  for (let i = 1; i < 3; i++) {
-    ctx.beginPath(); ctx.moveTo(x + size * i / 3, y);      ctx.lineTo(x + size * i / 3, y + size); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x,      y + size * i / 3); ctx.lineTo(x + size, y + size * i / 3); ctx.stroke();
-  }
-
-  cropCornerPositions().forEach(([cx, cy]) => {
-    ctx.beginPath();
-    ctx.arc(cx, cy, HANDLE_R, 0, Math.PI * 2);
-    ctx.fillStyle   = '#fff';
-    ctx.fill();
-    ctx.strokeStyle = '#1a6fa5';
-    ctx.lineWidth   = 2;
-    ctx.stroke();
-  });
-}
-
-function cropCornerPositions() {
-  const { x, y, size } = cropRect;
-  return [[x, y], [x + size, y], [x, y + size], [x + size, y + size]];
-}
-
-function cropHitCorner(px, py) {
-  return cropCornerPositions().findIndex(([cx, cy]) => {
-    const dx = px - cx, dy = py - cy;
-    return dx * dx + dy * dy <= (HANDLE_R + 4) * (HANDLE_R + 4);
-  });
-}
-
-function cropInsideRect(px, py) {
-  return px >= cropRect.x && px <= cropRect.x + cropRect.size &&
-         py >= cropRect.y && py <= cropRect.y + cropRect.size;
-}
-
-function cropEventPos(e) {
-  const canvas = document.getElementById('crop-canvas');
-  const r = canvas.getBoundingClientRect();
-  return [
-    (e.clientX - r.left) * (canvas.width  / r.width),
-    (e.clientY - r.top)  * (canvas.height / r.height),
-  ];
-}
-
-function resizeImage(file, callback) {
-  openCropModal(file, callback);
 }
 
 document.getElementById('modal-ok').addEventListener('click', () => {
@@ -1068,87 +1025,6 @@ window.addEventListener('resize', () => {
   fitView(0);
 });
 
-// ---- クロップモーダル イベント ----
-{
-  const cc = document.getElementById('crop-canvas');
-
-  cc.addEventListener('mousedown', e => {
-    e.preventDefault();
-    const [px, py] = cropEventPos(e);
-    const ci = cropHitCorner(px, py);
-    if (ci >= 0) {
-      cropDragState = { type: 'corner', cornerIdx: ci, origRect: { ...cropRect } };
-    } else if (cropInsideRect(px, py)) {
-      cropDragState = { type: 'move', startX: px, startY: py, origRect: { ...cropRect } };
-    }
-  });
-
-  cc.addEventListener('mousemove', e => {
-    const [px, py] = cropEventPos(e);
-    const cw = cc.width, ch = cc.height;
-    if (!cropDragState) {
-      const ci = cropHitCorner(px, py);
-      cc.style.cursor = ci >= 0
-        ? ['nw-resize', 'ne-resize', 'sw-resize', 'se-resize'][ci]
-        : cropInsideRect(px, py) ? 'move' : 'crosshair';
-      return;
-    }
-    if (cropDragState.type === 'move') {
-      const dx = px - cropDragState.startX;
-      const dy = py - cropDragState.startY;
-      const s  = cropDragState.origRect.size;
-      cropRect.x = Math.max(0, Math.min(cw - s, cropDragState.origRect.x + dx));
-      cropRect.y = Math.max(0, Math.min(ch - s, cropDragState.origRect.y + dy));
-    } else {
-      const orig = cropDragState.origRect;
-      const fps  = [
-        [orig.x + orig.size, orig.y + orig.size],
-        [orig.x,             orig.y + orig.size],
-        [orig.x + orig.size, orig.y            ],
-        [orig.x,             orig.y            ],
-      ];
-      const [fx, fy] = fps[cropDragState.cornerIdx];
-      const calc = [
-        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(fx - px, fy - py)), fx,      fy     ); cropRect = { x: fx - s, y: fy - s, size: s }; },
-        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(px - fx, fy - py)), cw - fx, fy     ); cropRect = { x: fx,     y: fy - s, size: s }; },
-        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(fx - px, py - fy)), fx,      ch - fy); cropRect = { x: fx - s, y: fy,     size: s }; },
-        () => { const s = Math.min(Math.max(MIN_CROP_SZ, Math.max(px - fx, py - fy)), cw - fx, ch - fy); cropRect = { x: fx,     y: fy,     size: s }; },
-      ];
-      calc[cropDragState.cornerIdx]();
-    }
-    renderCropCanvas();
-  });
-
-  const endCropDrag = () => { cropDragState = null; };
-  cc.addEventListener('mouseup',    endCropDrag);
-  cc.addEventListener('mouseleave', endCropDrag);
-}
-
-document.getElementById('crop-ok').addEventListener('click', () => {
-  document.getElementById('modal-crop-overlay').classList.add('hidden');
-  if (!cropCallback || !cropImage) return;
-  const canvas = document.getElementById('canvas-resize');
-  const ctx    = canvas.getContext('2d');
-  const srcX   = cropRect.x    / cropDisplayScale;
-  const srcY   = cropRect.y    / cropDisplayScale;
-  const srcS   = cropRect.size / cropDisplayScale;
-  canvas.width  = ICON_SIZE;
-  canvas.height = ICON_SIZE;
-  ctx.clearRect(0, 0, ICON_SIZE, ICON_SIZE);
-  ctx.drawImage(cropImage, srcX, srcY, srcS, srcS, 0, 0, ICON_SIZE, ICON_SIZE);
-  const dataUrl = canvas.toDataURL('image/png');
-  const cb = cropCallback;
-  cropCallback = null;
-  cropImage    = null;
-  cb(dataUrl);
-});
-
-document.getElementById('crop-cancel').addEventListener('click', () => {
-  document.getElementById('modal-crop-overlay').classList.add('hidden');
-  cropCallback = null;
-  cropImage    = null;
-});
-
 // ============================================================
 //  Supabase / ホスティングモード
 // ============================================================
@@ -1157,10 +1033,8 @@ document.getElementById('crop-cancel').addEventListener('click', () => {
 const sb = window.sb ?? null;
 
 let mapId = null;
-let mapTitle = '無題マップ';
+let currentUser = null;
 let realtimeChannel = null;
-let realtimeReady = false;
-let broadcastQueue = [];
 let saveTimer = null;
 const CLIENT_ID = crypto.randomUUID();
 
@@ -1173,6 +1047,23 @@ function parseMapId() {
 
 function isHosted() {
   return Boolean(sb && mapId);
+}
+
+function updateAuthUI() {
+  const btnLogin  = document.getElementById('btn-login');
+  const btnLogout = document.getElementById('btn-logout');
+  const userLabel = document.getElementById('auth-user-label');
+  if (!btnLogin) return;
+  if (currentUser) {
+    btnLogin.classList.add('hidden');
+    btnLogout.classList.remove('hidden');
+    userLabel.textContent = currentUser.user_metadata?.full_name || currentUser.email || '';
+    userLabel.classList.remove('hidden');
+  } else {
+    btnLogin.classList.remove('hidden');
+    btnLogout.classList.add('hidden');
+    userLabel.classList.add('hidden');
+  }
 }
 
 function updateMapModeUI() {
@@ -1188,15 +1079,11 @@ function updateMapModeUI() {
 }
 
 async function loadMapFromDB(id) {
-  const { data, error } = await sb.from('maps').select('title, data').eq('id', id).single();
+  const { data, error } = await sb.from('maps').select('data').eq('id', id).single();
   if (error || !data) {
     showNotify('マップが見つかりません');
     return;
   }
-  mapTitle = data.title ?? '無題マップ';
-  const titleInput = document.getElementById('input-map-title');
-  if (titleInput) titleInput.value = mapTitle;
-  document.title = `${mapTitle} - AutoRelationMap`;
   const mapData = data.data;
   nodes      = (mapData.nodes ?? []).map(n => ({ ...n, r: R_BASE }));
   links      = (mapData.links ?? []).map(l => ({ ...l }));
@@ -1222,7 +1109,7 @@ function buildSaveData() {
 async function saveMapToDB() {
   if (!isHosted()) return;
   await sb.from('maps')
-    .update({ title: mapTitle, data: buildSaveData(), updated_at: new Date().toISOString() })
+    .update({ data: buildSaveData(), updated_at: new Date().toISOString() })
     .eq('id', mapId);
 }
 
@@ -1233,8 +1120,12 @@ function scheduleSave() {
 }
 
 async function createMapInDB() {
+  const savedData = localStorage.getItem('pendingMapData');
+  const mapData   = savedData ? JSON.parse(savedData) : buildSaveData();
+  localStorage.removeItem('pendingMapData');
+
   const { data, error } = await sb.from('maps')
-    .insert({ title: '無題マップ', data: buildSaveData() })
+    .insert({ owner_id: currentUser.id, title: '無題マップ', data: mapData })
     .select('id')
     .single();
 
@@ -1245,40 +1136,53 @@ async function createMapInDB() {
 
   mapId = data.id;
   window.history.pushState({}, '', `/map/${mapId}`);
+
+  // OAuth リダイレクト後に復元したデータを再セット
+  if (savedData) {
+    const restored = JSON.parse(savedData);
+    nodes      = (restored.nodes ?? []).map(n => ({ ...n, r: R_BASE }));
+    links      = (restored.links ?? []).map(l => ({ ...l }));
+    nextNodeId = restored.meta?.nextNodeId ?? 1;
+    nextLinkId = restored.meta?.nextLinkId ?? 1;
+    restart({ layout: false, fit: false });
+  }
+
   subscribeRealtime(mapId);
   updateMapModeUI();
 }
 
 async function createNewMap() {
   if (!sb) return;
+  if (!currentUser) {
+    // ログイン前に現在の状態を保存しておき、OAuth 後に復元
+    sessionStorage.setItem('pendingCreateMap', '1');
+    localStorage.setItem('pendingMapData', JSON.stringify(buildSaveData()));
+    await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    return;
+  }
   await createMapInDB();
 }
 
 function subscribeRealtime(id) {
   if (realtimeChannel) sb.removeChannel(realtimeChannel);
-  realtimeReady = false;
   realtimeChannel = sb.channel(`map:${id}`)
     .on('broadcast', { event: 'op' }, ({ payload }) => {
       if (payload.clientId === CLIENT_ID) return;
       applyRemoteOp(payload);
     })
-    .subscribe(status => {
-      if (status === 'SUBSCRIBED') {
-        realtimeReady = true;
-        broadcastQueue.forEach(item => realtimeChannel.send(item));
-        broadcastQueue = [];
-      }
-    });
+    .subscribe();
 }
 
 function broadcastOp(op, data) {
   if (!realtimeChannel) return;
-  const msg = { type: 'broadcast', event: 'op', payload: { op, ...data, clientId: CLIENT_ID } };
-  if (realtimeReady) {
-    realtimeChannel.send(msg);
-  } else {
-    broadcastQueue.push(msg);
-  }
+  realtimeChannel.send({
+    type: 'broadcast',
+    event: 'op',
+    payload: { op, ...data, clientId: CLIENT_ID },
+  });
 }
 
 function applyRemoteOp(payload) {
@@ -1348,20 +1252,42 @@ function copyShareLink() {
   });
 }
 
+// ---- 認証 UI イベント ----
+document.getElementById('btn-login')?.addEventListener('click', async () => {
+  if (!sb) return;
+  await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin },
+  });
+});
+
+document.getElementById('btn-logout')?.addEventListener('click', async () => {
+  if (!sb) return;
+  await sb.auth.signOut();
+});
+
 document.getElementById('btn-create-map')?.addEventListener('click', createNewMap);
 document.getElementById('btn-copy-share')?.addEventListener('click', copyShareLink);
-
-document.getElementById('input-map-title')?.addEventListener('input', function () {
-  mapTitle = this.value.trim() || '無題マップ';
-  document.title = `${mapTitle} - AutoRelationMap`;
-  scheduleSave();
-});
 
 // ---- 初期化 ----
 getSvgSize();
 restart({ layout: false, fit: false });
 
 if (sb) {
+  sb.auth.getSession().then(({ data: { session } }) => {
+    currentUser = session?.user ?? null;
+    updateAuthUI();
+  });
+
+  sb.auth.onAuthStateChange((event, session) => {
+    currentUser = session?.user ?? null;
+    updateAuthUI();
+    if (event === 'SIGNED_IN' && sessionStorage.getItem('pendingCreateMap') === '1') {
+      sessionStorage.removeItem('pendingCreateMap');
+      createMapInDB();
+    }
+  });
+
   mapId = parseMapId();
   if (mapId) {
     loadMapFromDB(mapId).then(() => subscribeRealtime(mapId));

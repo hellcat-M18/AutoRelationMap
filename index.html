@@ -4,20 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AutoRelationMap</title>
-  <meta property="og:title" content="AutoRelationMap" />
-  <meta property="og:description" content="相関図マップを作成して共有できるツール" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="AutoRelationMap" />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="AutoRelationMap" />
-  <meta name="twitter:description" content="相関図マップを作成して共有できるツール" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="style.css" />
   <script src="/config.js"></script>
 </head>
 <body>
   <!-- サイドパネル -->
   <div id="sidebar">
     <h2>AutoRelationMap</h2>
+
+    <section id="section-auth">
+      <span id="auth-user-label" class="hidden"></span>
+      <button id="btn-login">ログイン</button>
+      <button id="btn-logout" class="hidden">ログアウト</button>
+    </section>
+
+    <hr />
 
     <section id="section-add">
       <h3>人物を追加</h3>
@@ -45,7 +46,6 @@
 
     <section id="section-map-mode" class="hidden">
       <h3>共有</h3>
-      <input type="text" id="input-map-title" placeholder="マップ名を入力" maxlength="50" />
       <button id="btn-copy-share">共有リンクをコピー</button>
       <span id="autosave-label">自動保存中</span>
     </section>
@@ -147,27 +147,12 @@
     </div>
   </div>
 
-  <!-- クロップモーダル -->
-  <div id="modal-crop-overlay" class="hidden">
-    <div id="modal-crop">
-      <h3>切り取り範囲を選択</h3>
-      <p class="crop-hint">ドラッグで移動・コーナーをドラッグしてリサイズ</p>
-      <div id="crop-canvas-wrapper">
-        <canvas id="crop-canvas"></canvas>
-      </div>
-      <div class="modal-buttons">
-        <button id="crop-cancel">キャンセル</button>
-        <button id="crop-ok">決定</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ツールチップ -->
   <div id="tooltip" class="hidden"></div>
 
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="/supabase-client.js"></script>
-  <script src="/app.js"></script>
+  <script src="supabase-client.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

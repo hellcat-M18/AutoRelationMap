@@ -53,25 +53,37 @@ body {
 #section-add,
 #section-json,
 #section-layout,
-#section-map-mode {
+#section-map-mode,
+#section-auth {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-/* ========== クラウド保存・共有 ========== */
-#input-map-title {
-  width: 100%;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid #c8d4e0;
-  background: #f0f4f8;
-  color: #1a1a2e;
-  font-size: 0.85rem;
+/* ========== 認証 UI ========== */
+#auth-user-label {
+  font-size: 0.78rem;
+  color: #556677;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#btn-login {
+  background: #1a6fa5;
+  color: #ffffff;
   font-weight: bold;
 }
-#input-map-title::placeholder { color: #aabbcc; font-weight: normal; }
-#input-map-title:focus { outline: 2px solid #1a6fa5; }
+#btn-login:hover { background: #155e8e; }
+
+#btn-logout {
+  background: #e8eef5;
+  color: #778899;
+}
+#btn-logout:hover { background: #d4dce8; color: #334455; }
+
+/* ========== クラウド保存・共有 ========== */
 #btn-create-map {
   background: #e8f5e9;
   color: #2e7d32;
@@ -91,60 +103,6 @@ body {
   color: #99aabb;
   text-align: center;
 }
-
-/* ========== クロップモーダル ========== */
-#modal-crop-overlay {
-  position: fixed;
-  inset: 0;
-  background: #0009;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 300;
-}
-#modal-crop-overlay.hidden { display: none; }
-
-#modal-crop {
-  background: #1a1a2e;
-  border-radius: 14px;
-  padding: 20px 20px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 90vw;
-  max-height: 90vh;
-}
-#modal-crop h3 {
-  color: #e8eef5;
-  font-size: 0.95rem;
-}
-.crop-hint {
-  font-size: 0.73rem;
-  color: #6688aa;
-}
-
-#crop-canvas-wrapper {
-  display: flex;
-  justify-content: center;
-  overflow: auto;
-}
-
-#crop-canvas {
-  display: block;
-  border-radius: 6px;
-  cursor: crosshair;
-  max-width: 80vw;
-  max-height: 60vh;
-  object-fit: contain;
-}
-
-#crop-ok {
-  background: #1a6fa5;
-  color: #ffffff;
-  font-weight: bold;
-  padding: 7px 20px;
-}
-#crop-cancel { padding: 7px 20px; }
 
 /* ========== ユーティリティ ========== */
 .hidden { display: none !important; }
