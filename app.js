@@ -396,6 +396,87 @@ function renderDetailPanel(node) {
   }
 }
 
+// ---- ピボットMDS: グラフ距離をもとにした初期配置 ----
+// 繋がりが近いノードを最初から近くに置くことで交差を大幅に削減する
+function bfsDistances(startId, adjMap) {
+  const dist = new Map();
+  dist.set(startId, 0);
+  const queue = [startId];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    const d = dist.get(id);
+    for (const neighbor of adjMap.get(id) ?? []) {
+      if (!dist.has(neighbor)) {
+        dist.set(neighbor, d + 1);
+        queue.push(neighbor);
+      }
+    }
+  }
+  // 非連結ノードはノード数を距離として扱う
+  nodes.forEach(n => { if (!dist.has(n.id)) dist.set(n.id, nodes.length); });
+  return dist;
+}
+
+function seedPivotMdsPositions() {
+  getSvgSize();
+  if (nodes.length === 0) return;
+  if (nodes.length === 1) {
+    nodes[0].x = width / 2; nodes[0].y = height / 2;
+    nodes[0].vx = 0; nodes[0].vy = 0;
+    return;
+  }
+
+  // 無向隣接マップを構築
+  const adj = new Map();
+  nodes.forEach(n => adj.set(n.id, []));
+  links.forEach(link => {
+    const s = getLinkSourceId(link);
+    const t = getLinkTargetId(link);
+    adj.get(s)?.push(t);
+    adj.get(t)?.push(s);
+  });
+
+  // ピボット1: 入次数最大ノード（最も参照されている＝中心的）
+  const pivot1Id = nodes.reduce((best, n) =>
+    getInDegree(n.id) > getInDegree(best.id) ? n : best, nodes[0]).id;
+
+  // ピボット1からBFS → 最遠ノードをピボット2に
+  const dist1 = bfsDistances(pivot1Id, adj);
+  let pivot2Id = pivot1Id;
+  let maxDist = -1;
+  dist1.forEach((d, id) => { if (d > maxDist && id !== pivot1Id) { maxDist = d; pivot2Id = id; } });
+  if (pivot2Id === pivot1Id) {
+    pivot2Id = nodes.find(n => n.id !== pivot1Id)?.id ?? pivot1Id;
+  }
+
+  const dist2 = bfsDistances(pivot2Id, adj);
+
+  // dist1 → X軸、dist2 → Y軸 としてキャンバスにスケール
+  const xs = nodes.map(n => dist1.get(n.id) ?? 0);
+  const ys = nodes.map(n => dist2.get(n.id) ?? 0);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+
+  const margin = Math.min(width, height) * 0.12;
+  const scaleX = (width  - margin * 2) / rangeX;
+  const scaleY = (height - margin * 2) / rangeY;
+  const scale  = Math.min(scaleX, scaleY) * 0.82;
+  const cx = width / 2;
+  const cy = height / 2;
+
+  nodes.forEach((node, i) => {
+    const nx = xs[i] - (minX + maxX) / 2;
+    const ny = ys[i] - (minY + maxY) / 2;
+    // 同距離ノードが重ならないよう微小ジッターを加える
+    node.x = cx + nx * scale + (Math.random() - 0.5) * 18;
+    node.y = cy + ny * scale + (Math.random() - 0.5) * 18;
+    node.vx = 0;
+    node.vy = 0;
+  });
+}
+
 function seedCircularPositions() {
   getSvgSize();
   const radius = Math.min(width, height) * 0.3;
@@ -702,7 +783,7 @@ function getForceRadialTarget(node) {
 function runForceLayout({ fit = true, seed = false } = {}) {
   beginLayout();
   if (seed || nodes.some(node => !Number.isFinite(node.x) || !Number.isFinite(node.y))) {
-    seedCircularPositions();
+    seedPivotMdsPositions();
   }
 
   simulation.force('center', d3.forceCenter(width / 2, height / 2));
@@ -1066,7 +1147,7 @@ document.getElementById('btn-add-person').addEventListener('click', async () => 
 });
 
 document.getElementById('btn-relayout').addEventListener('click', () => {
-  seedCircularPositions();
+  seedPivotMdsPositions();
   restart({ layout: true, fit: true, seed: true });
 });
 
@@ -1106,7 +1187,7 @@ document.getElementById('input-load').addEventListener('change', function () {
       nextNodeId = data.meta?.nextNodeId ?? (Math.max(0, ...nodes.map(node => node.id)) + 1);
       nextLinkId = data.meta?.nextLinkId ?? (Math.max(0, ...links.map(link => link.id)) + 1);
 
-      seedCircularPositions();
+      seedPivotMdsPositions();
       restart({ layout: true, fit: true, seed: true });
     } catch {
       showNotify('JSON の読み込みに失敗しました');
@@ -1217,7 +1298,7 @@ async function loadMapFromDB(id) {
   links      = (mapData.links ?? []).map(l => ({ ...l }));
   nextNodeId = mapData.meta?.nextNodeId ?? (nodes.length ? Math.max(...nodes.map(n => n.id)) + 1 : 1);
   nextLinkId = mapData.meta?.nextLinkId ?? (links.length ? Math.max(...links.map(l => l.id)) + 1 : 1);
-  seedCircularPositions();
+  seedPivotMdsPositions();
   restart({ layout: true, fit: true, seed: true });
 }
 
