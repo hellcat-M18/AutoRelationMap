@@ -229,6 +229,46 @@ function updateBiDir() {
   });
 }
 
+// Kruskal法による全域木を計算し、各リンクに isSpanning フラグを付ける
+function buildSpanningTree() {
+  const parent = new Map();
+  const rankMap = new Map();
+  nodes.forEach(n => { parent.set(n.id, n.id); rankMap.set(n.id, 0); });
+
+  function find(x) {
+    if (parent.get(x) !== x) parent.set(x, find(parent.get(x)));
+    return parent.get(x);
+  }
+  function union(x, y) {
+    const rx = find(x), ry = find(y);
+    if (rx === ry) return false;
+    if ((rankMap.get(rx) ?? 0) < (rankMap.get(ry) ?? 0)) {
+      parent.set(rx, ry);
+    } else if ((rankMap.get(rx) ?? 0) > (rankMap.get(ry) ?? 0)) {
+      parent.set(ry, rx);
+    } else {
+      parent.set(ry, rx);
+      rankMap.set(rx, (rankMap.get(rx) ?? 0) + 1);
+    }
+    return true;
+  }
+
+  // 優先順位: 双方向リンク → 入次数の高いターゲット → それ以外
+  const sorted = [...links].sort((a, b) => {
+    const aBi = biDirSet.has(a.id) ? 1 : 0;
+    const bBi = biDirSet.has(b.id) ? 1 : 0;
+    if (aBi !== bBi) return bBi - aBi;
+    return getInDegree(getLinkTargetId(b)) - getInDegree(getLinkTargetId(a));
+  });
+
+  const spanSet = new Set();
+  sorted.forEach(link => {
+    if (union(getLinkSourceId(link), getLinkTargetId(link))) spanSet.add(link.id);
+  });
+
+  links.forEach(link => { link.isSpanning = spanSet.has(link.id); });
+}
+
 function clearLinkRouting() {
   links.forEach(link => {
     delete link.routePoints;
@@ -688,6 +728,9 @@ function syncGraphElements() {
     .on('mouseover', (event, link) => showTooltip(event, link.label || '（ラベルなし）'))
     .on('mouseout', hideTooltip);
 
+  linkEnter.merge(linkSelection)
+    .classed('link-secondary', link => !link.isSpanning);
+
   const labelSelection = labelGroup.selectAll('text.link-label')
     .data(links, link => link.id);
 
@@ -697,7 +740,8 @@ function syncGraphElements() {
     .append('text')
     .attr('class', 'link-label')
     .merge(labelSelection)
-    .text(link => link.label);
+    .text(link => link.label)
+    .classed('link-secondary', link => !link.isSpanning);
 
   const nodeSelection = nodeGroup.selectAll('g.node-group')
     .data(nodes, node => node.id);
@@ -890,6 +934,7 @@ function restart({ layout = true, fit = layout, seed = false } = {}) {
   rebuildDegreeCache();
   updateAllRadii();
   updateBiDir();
+  buildSpanningTree();
   syncGraphElements();
   if (!layout) {
     ticked();

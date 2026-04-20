@@ -216,6 +216,22 @@ button:hover { background: #d0dcea; }
 .selection-active .link-group path:not(.highlighted-out):not(.highlighted-in) {
   opacity: 0.2;
 }
+/* 全域木外リンク：普段は非表示 */
+.link-group path.link-secondary {
+  opacity: 0;
+  pointer-events: none;
+}
+/* 選択時に全域木外リンクを破線で表示 */
+.link-group path.link-secondary.highlighted-out,
+.link-group path.link-secondary.highlighted-in {
+  opacity: 1;
+  pointer-events: auto;
+  stroke-dasharray: 5 3;
+}
+/* 選択中でも非ハイライトの全域木外リンクは非表示のまま */
+.selection-active .link-group path.link-secondary:not(.highlighted-out):not(.highlighted-in) {
+  opacity: 0;
+}
 /* 非接続ノードのラベルも薄暮らす */
 .selection-active .label-group text.link-label:not(.highlighted) {
   opacity: 0.15;
@@ -223,6 +239,19 @@ button:hover { background: #d0dcea; }
 .label-group text.link-label.highlighted {
   fill: #b06a00;
   opacity: 1;
+}
+/* 全域木外リンクのラベル：普段は非表示 */
+.label-group text.link-label.link-secondary {
+  opacity: 0;
+  pointer-events: none;
+}
+.label-group text.link-label.link-secondary.highlighted {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* 選択中でも非ハイライトの全域木外ラベルは非表示のまま */
+.selection-active .label-group text.link-label.link-secondary:not(.highlighted) {
+  opacity: 0;
 }
 /* 非接続ノードをディム (検索ヒット中は除外) */
 .selection-active .node-group:not(.selected):not(.connected):not(.search-match) {
