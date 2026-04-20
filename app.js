@@ -962,14 +962,14 @@ document.getElementById('ctx-edit-icon').addEventListener('click', () => {
   document.getElementById('modal-icon-desc').textContent = target.name;
   document.getElementById('modal-icon-overlay').classList.remove('hidden');
 
-  // 選択済みファイルをリセット
+  // 前回のリスナーを確実に除去してから登録
   const fileInput = document.getElementById('input-icon-change');
   fileInput.value = '';
+  const newInput = fileInput.cloneNode(true);
+  fileInput.parentNode.replaceChild(newInput, fileInput);
 
-  // ファイル選択後の処理をセット（one-time）
   const onchange = () => {
-    const file = fileInput.files[0];
-    fileInput.removeEventListener('change', onchange);
+    const file = newInput.files[0];
     document.getElementById('modal-icon-overlay').classList.add('hidden');
     if (!file) return;
     resizeImage(file, async dataUrl => {
@@ -980,11 +980,12 @@ document.getElementById('ctx-edit-icon').addEventListener('click', () => {
       restart({ layout: false, fit: false });
     });
   };
-  fileInput.addEventListener('change', onchange);
+  newInput.addEventListener('change', onchange, { once: true });
 });
 
 document.getElementById('modal-icon-cancel').addEventListener('click', () => {
-  document.getElementById('input-icon-change').value = '';
+  const fileInput = document.getElementById('input-icon-change');
+  if (fileInput) fileInput.value = '';
   document.getElementById('modal-icon-overlay').classList.add('hidden');
 });
 
