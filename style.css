@@ -212,8 +212,37 @@ button:hover { background: #d0dcea; }
   opacity: 1;
   marker-end: url(#arrow-in);
 }
+/* 双方向リンク：太い直線 */
+.link-group path.link-bidir {
+  stroke-width: 3;
+}
+/* スプリット時（ハイライト中）は通常の太さに戻す */
+.link-group path.link-bidir.highlighted-out,
+.link-group path.link-bidir.highlighted-in {
+  stroke-width: 2.5;
+}
+/* 双方向セカンダリリンク（逆方向）はデフォルト非表示 */
+.link-group path.link-bidir-secondary {
+  display: none;
+}
+.link-group path.link-bidir-secondary.link-bidir-secondary-visible {
+  display: block;
+}
+/* セカンダリラベル非表示 */
+.label-group text.link-label.link-bidir-secondary {
+  display: none;
+}
+.label-group text.link-label.link-bidir-secondary.link-bidir-secondary-visible {
+  display: block;
+}
+/* 双方向リンクのハイライト */
+.link-group path.highlighted-bidir {
+  stroke: var(--graph-accent);
+  stroke-width: 4;
+  opacity: 1;
+}
 /* 非接続リンクは薄暮らす */
-.selection-active .link-group path:not(.highlighted-out):not(.highlighted-in) {
+.selection-active .link-group path:not(.highlighted-out):not(.highlighted-in):not(.highlighted-bidir) {
   opacity: 0.2;
 }
 /* 非接続ノードのラベルも薄暮らす */

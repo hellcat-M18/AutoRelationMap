@@ -7,16 +7,17 @@ const ICON_SIZE = 120;
 const R_BASE = 32;
 const R_MIN = 28;
 const R_MAX = 110;
-const CURVE_AMOUNT = 55;
-const CURVE_BASE = 30;
 const FORCE_LINK_GAP = 220;
 const COLLIDE_PADDING = 90;
+const BIDIR_SPLIT_OFFSET = 6;
 
 let nodes = [];
 let links = [];
 let nextNodeId = 1;
 let nextLinkId = 1;
 let biDirSet = new Set();
+let biDirPrimarySet = new Set();
+let biDirSecondarySet = new Set();
 let pendingDataUrl = null;
 let selectedNodeId = null;
 let searchMatches = [];      // マッチノードIDの配列
@@ -220,18 +221,21 @@ function getSvgSize() {
 
 function updateBiDir() {
   biDirSet.clear();
+  biDirPrimarySet.clear();
+  biDirSecondarySet.clear();
   const pairSet = new Set();
   links.forEach(link => pairSet.add(`${getLinkSourceId(link)}-${getLinkTargetId(link)}`));
   links.forEach(link => {
-    if (pairSet.has(`${getLinkTargetId(link)}-${getLinkSourceId(link)}`)) {
+    const s = getLinkSourceId(link);
+    const t = getLinkTargetId(link);
+    if (pairSet.has(`${t}-${s}`)) {
       biDirSet.add(link.id);
+      const revLink = links.find(l => getLinkSourceId(l) === t && getLinkTargetId(l) === s);
+      if (revLink) {
+        if (link.id < revLink.id) biDirPrimarySet.add(link.id);
+        else biDirSecondarySet.add(link.id);
+      }
     }
-  });
-}
-
-function clearLinkRouting() {
-  links.forEach(link => {
-    delete link.routePoints;
   });
 }
 
@@ -259,17 +263,47 @@ function applySelectionState() {
   linkGroup.selectAll('path.link-path')
     .classed('highlighted-out', link => {
       if (!selectedNodeId) return false;
+      const split = isBidirSplit(link);
+      // 非スプリット双方向プライマリは highlighted-bidir を使う
+      if (biDirPrimarySet.has(link.id) && !split) return false;
       return getLinkSourceId(link) === selectedNodeId;
     })
     .classed('highlighted-in', link => {
       if (!selectedNodeId) return false;
+      const split = isBidirSplit(link);
+      if (biDirPrimarySet.has(link.id) && !split) return false;
       return getLinkTargetId(link) === selectedNodeId;
+    })
+    .classed('highlighted-bidir', link => {
+      if (!selectedNodeId || !biDirPrimarySet.has(link.id)) return false;
+      if (isBidirSplit(link)) return false; // スプリット時は out/in に委ねる
+      return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
+    })
+    .classed('link-bidir-secondary-visible', link => {
+      if (!biDirSecondarySet.has(link.id)) return false;
+      return isBidirSplit(link);
+    })
+    .attr('marker-start', link => {
+      if (!biDirPrimarySet.has(link.id)) return null;
+      return isBidirSplit(link) ? null : 'url(#arrow-bidir-start)';
     });
 
+  // スプリット時はジオメトリが変わるのでパスとラベル位置を再描画
+  geometryCache.clear();
+  linkGroup.selectAll('path.link-path').attr('d', link => computePath(link));
+
   labelGroup.selectAll('text.link-label')
+    .classed('link-bidir-secondary-visible', link => {
+      if (!biDirSecondarySet.has(link.id)) return false;
+      return isBidirSplit(link);
+    })
     .classed('highlighted', link => {
       if (!selectedNodeId) return false;
       return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
+    })
+    .attr('transform', link => {
+      const point = getLabelMidpoint(link);
+      return `translate(${point.x},${point.y})`;
     });
 
   svg.classed('selection-active', Boolean(selectedNodeId));
@@ -477,20 +511,6 @@ function seedPivotMdsPositions() {
   });
 }
 
-function seedCircularPositions() {
-  getSvgSize();
-  const radius = Math.min(width, height) * 0.3;
-  const ordered = [...nodes].sort((a, b) => getInDegree(b.id) - getInDegree(a.id) || a.id - b.id);
-
-  ordered.forEach((node, index) => {
-    const angle = (index / Math.max(ordered.length, 1)) * Math.PI * 2;
-    node.x = width / 2 + Math.cos(angle) * radius;
-    node.y = height / 2 + Math.sin(angle) * radius;
-    node.vx = 0;
-    node.vy = 0;
-  });
-}
-
 function stopActiveLayouts() {
   simulation.stop();
 }
@@ -498,7 +518,6 @@ function stopActiveLayouts() {
 function beginLayout() {
   layoutRunId += 1;
   stopActiveLayouts();
-  clearLinkRouting();
   return layoutRunId;
 }
 
@@ -617,90 +636,16 @@ function searchPrev() {
   navigateToSearchMatch();
 }
 
-// ---- エッジルーティング: リンクがノードを迂回する ----
-const ROUTE_MARGIN = 22;
-
-function pointToSegmentDist(px, py, ax, ay, bx, by) {
-  const adx = bx - ax, ady = by - ay;
-  const lenSq = adx * adx + ady * ady;
-  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
-  const t = Math.max(0, Math.min(1, ((px - ax) * adx + (py - ay) * ady) / lenSq));
-  return Math.hypot(px - (ax + t * adx), py - (ay + t * ady));
+// 選択中のノードに接続する双方向リンクかどうか
+function isBidirSplit(link) {
+  if (!selectedNodeId) return false;
+  if (!biDirSet.has(link.id)) return false;
+  const s = getLinkSourceId(link);
+  const t = getLinkTargetId(link);
+  return s === selectedNodeId || t === selectedNodeId;
 }
 
-function computeLinkRoute(link) {
-  const source = getLinkSourceNode(link);
-  const target = getLinkTargetNode(link);
-  if (!source || !target || source === target) return [];
-
-  // 始点→終点のパスを反復的に迂回させる
-  let pts = [{ x: source.x, y: source.y }, { x: target.x, y: target.y }];
-
-  for (let iter = 0; iter < 4; iter++) {
-    let changed = false;
-    const next = [pts[0]];
-
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const sdx = b.x - a.x, sdy = b.y - a.y;
-      const slen = Math.sqrt(sdx * sdx + sdy * sdy) || 1;
-      const slenSq = sdx * sdx + sdy * sdy;
-
-      // このサブセグメントで最も深く食い込んでいるノードを探す
-      let worst = null;
-      let worstOverlap = 0;
-
-      for (const node of nodes) {
-        if (node.id === source.id || node.id === target.id) continue;
-        const d = pointToSegmentDist(node.x, node.y, a.x, a.y, b.x, b.y);
-        const overlap = (node.r + ROUTE_MARGIN) - d;
-        if (overlap > worstOverlap) {
-          worstOverlap = overlap;
-          worst = node;
-        }
-      }
-
-      if (worst) {
-        // サブセグメントの垂直方向
-        const perpX = -sdy / slen, perpY = sdx / slen;
-        // ノードがどちら側にあるか（外積）
-        const cross = sdx * (worst.y - a.y) - sdy * (worst.x - a.x);
-        const sign = cross >= 0 ? -1 : 1;
-        // ノードをセグメント上に射影
-        const t = Math.max(0.1, Math.min(0.9,
-          ((worst.x - a.x) * sdx + (worst.y - a.y) * sdy) / slenSq));
-        const projX = a.x + sdx * t;
-        const projY = a.y + sdy * t;
-        const offset = worst.r + ROUTE_MARGIN;
-        next.push({ x: projX + perpX * offset * sign, y: projY + perpY * offset * sign });
-        changed = true;
-      }
-
-      next.push(b);
-    }
-
-    pts = next;
-    if (!changed) break;
-  }
-
-  return pts.length > 2 ? pts.slice(1, -1) : [];
-}
-
-function computeAllRoutes() {
-  links.forEach(link => {
-    link.routePoints = computeLinkRoute(link);
-  });
-}
-
-function computeCurve(link) {
-  const sourceId = getLinkSourceId(link);
-  const targetId = getLinkTargetId(link);
-  const sign = ((sourceId * 7 + targetId * 13) % 2 === 0) ? 1 : -1;
-  if (biDirSet.has(link.id)) return CURVE_AMOUNT;
-  return CURVE_BASE * sign;
-}
-
-function computeCurvedGeometry(link) {
+function computeLinkGeometry(link) {
   const cached = geometryCache.get(link.id);
   if (cached !== undefined) return cached;
 
@@ -711,23 +656,22 @@ function computeCurvedGeometry(link) {
   const dx = target.x - source.x;
   const dy = target.y - source.y;
   const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-  const nx = -dy / distance;
-  const ny = dx / distance;
-  const curve = computeCurve(link);
-  const cpx = (source.x + target.x) / 2 + nx * curve;
-  const cpy = (source.y + target.y) / 2 + ny * curve;
+  const ux = dx / distance, uy = dy / distance;
+  const nx = -uy, ny = ux; // 垂直方向（進行方向の左）
 
-  const sourceDx = cpx - source.x;
-  const sourceDy = cpy - source.y;
-  const sourceDistance = Math.sqrt(sourceDx * sourceDx + sourceDy * sourceDy) || 1;
-  const sx = source.x + sourceDx / sourceDistance * source.r;
-  const sy = source.y + sourceDy / sourceDistance * source.r;
-
-  const targetDx = cpx - target.x;
-  const targetDy = cpy - target.y;
-  const targetDistance = Math.sqrt(targetDx * targetDx + targetDy * targetDy) || 1;
-  const ex = target.x + targetDx / targetDistance * (target.r + 12);
-  const ey = target.y + targetDy / targetDistance * (target.r + 12);
+  const split = isBidirSplit(link);
+  // 非スプリットの双方向プライマリは始端にも矢印スペースを確保
+  const startGap = (biDirPrimarySet.has(link.id) && !split) ? source.r + 12 : source.r;
+  // スプリット時は垂直方向に対称オフセット
+  const side = biDirSecondarySet.has(link.id) ? -1 : 1;
+  const offX = split ? nx * BIDIR_SPLIT_OFFSET * side : 0;
+  const offY = split ? ny * BIDIR_SPLIT_OFFSET * side : 0;
+  const sx = source.x + ux * startGap + offX;
+  const sy = source.y + uy * startGap + offY;
+  const ex = target.x - ux * (target.r + 12) + offX;
+  const ey = target.y - uy * (target.r + 12) + offY;
+  const cpx = (sx + ex) / 2;
+  const cpy = (sy + ey) / 2;
 
   const result = { sx, sy, cpx, cpy, ex, ey };
   geometryCache.set(link.id, result);
@@ -735,66 +679,15 @@ function computeCurvedGeometry(link) {
 }
 
 function computePath(link) {
-  const rp = link.routePoints;
-  if (rp && rp.length > 0) return computeRoutedPath(link);
-
-  const geometry = computeCurvedGeometry(link);
+  const geometry = computeLinkGeometry(link);
   if (!geometry) return '';
-  return `M ${geometry.sx} ${geometry.sy} Q ${geometry.cpx} ${geometry.cpy} ${geometry.ex} ${geometry.ey}`;
-}
-
-function computeRoutedPath(link) {
-  const source = getLinkSourceNode(link);
-  const target = getLinkTargetNode(link);
-  if (!source || !target) return '';
-  const wp = link.routePoints;
-
-  // 始点: ソース円周上→最初のウェイポイント方向
-  const first = wp[0];
-  const sdx = first.x - source.x, sdy = first.y - source.y;
-  const sd = Math.hypot(sdx, sdy) || 1;
-  const sx = source.x + sdx / sd * source.r;
-  const sy = source.y + sdy / sd * source.r;
-
-  // 終点: ターゲット円周上→最後のウェイポイント方向
-  const last = wp[wp.length - 1];
-  const tdx = last.x - target.x, tdy = last.y - target.y;
-  const td = Math.hypot(tdx, tdy) || 1;
-  const ex = target.x + tdx / td * (target.r + 12);
-  const ey = target.y + tdy / td * (target.r + 12);
-
-  const all = [{ x: sx, y: sy }, ...wp, { x: ex, y: ey }];
-
-  if (all.length === 3) {
-    return `M ${sx} ${sy} Q ${wp[0].x} ${wp[0].y} ${ex} ${ey}`;
-  }
-
-  // 複数ウェイポイント: スムーズチェーン（2次ベジェ連結）
-  let d = `M ${all[0].x} ${all[0].y}`;
-  d += ` L ${(all[0].x + all[1].x) / 2} ${(all[0].y + all[1].y) / 2}`;
-  for (let i = 1; i < all.length - 1; i++) {
-    const mx = (all[i].x + all[i + 1].x) / 2;
-    const my = (all[i].y + all[i + 1].y) / 2;
-    d += ` Q ${all[i].x} ${all[i].y} ${mx} ${my}`;
-  }
-  d += ` L ${all[all.length - 1].x} ${all[all.length - 1].y}`;
-  return d;
+  return `M ${geometry.sx} ${geometry.sy} L ${geometry.ex} ${geometry.ey}`;
 }
 
 function getLabelMidpoint(link) {
-  const rp = link.routePoints;
-  if (rp && rp.length > 0) {
-    // ルートの中央ウェイポイントにラベルを配置
-    const midIdx = Math.floor(rp.length / 2);
-    return { x: rp[midIdx].x, y: rp[midIdx].y - 8 };
-  }
-
-  const geometry = computeCurvedGeometry(link);
+  const geometry = computeLinkGeometry(link);
   if (!geometry) return { x: 0, y: 0 };
-  return {
-    x: 0.25 * geometry.sx + 0.5 * geometry.cpx + 0.25 * geometry.ex,
-    y: 0.25 * geometry.sy + 0.5 * geometry.cpy + 0.25 * geometry.ey - 8,
-  };
+  return { x: geometry.cpx, y: geometry.cpy - 8 };
 }
 
 function syncGraphElements() {
@@ -811,6 +704,11 @@ function syncGraphElements() {
     .on('mouseover', (event, link) => showTooltip(event, link.label || '（ラベルなし）'))
     .on('mouseout', hideTooltip);
 
+  linkEnter.merge(linkSelection)
+    .attr('marker-start', link => biDirPrimarySet.has(link.id) ? 'url(#arrow-bidir-start)' : null)
+    .classed('link-bidir', link => biDirPrimarySet.has(link.id))
+    .classed('link-bidir-secondary', link => biDirSecondarySet.has(link.id));
+
   const labelSelection = labelGroup.selectAll('text.link-label')
     .data(links, link => link.id);
 
@@ -820,7 +718,8 @@ function syncGraphElements() {
     .append('text')
     .attr('class', 'link-label')
     .merge(labelSelection)
-    .text(link => link.label);
+    .text(link => link.label)
+    .classed('link-bidir-secondary', link => biDirSecondarySet.has(link.id));
 
   const nodeSelection = nodeGroup.selectAll('g.node-group')
     .data(nodes, node => node.id);
@@ -880,7 +779,6 @@ function syncGraphElements() {
 
 function ticked() {
   geometryCache.clear();
-  computeAllRoutes();
 
   linkGroup.selectAll('path.link-path')
     .attr('d', link => computePath(link));
@@ -917,15 +815,16 @@ function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
 
 // ノード座標配列を使って交差数をカウント (O(m²))
 function countCrossings(positions) {
+  const evalLinks = links.filter(l => !biDirSecondarySet.has(l.id));
   let count = 0;
-  for (let i = 0; i < links.length; i++) {
-    const si = getLinkSourceId(links[i]);
-    const ti = getLinkTargetId(links[i]);
+  for (let i = 0; i < evalLinks.length; i++) {
+    const si = getLinkSourceId(evalLinks[i]);
+    const ti = getLinkTargetId(evalLinks[i]);
     const ax = positions.get(si).x, ay = positions.get(si).y;
     const bx = positions.get(ti).x, by = positions.get(ti).y;
-    for (let j = i + 1; j < links.length; j++) {
-      const sj = getLinkSourceId(links[j]);
-      const tj = getLinkTargetId(links[j]);
+    for (let j = i + 1; j < evalLinks.length; j++) {
+      const sj = getLinkSourceId(evalLinks[j]);
+      const tj = getLinkTargetId(evalLinks[j]);
       if (sj === si || sj === ti || tj === si || tj === ti) continue;
       const cx = positions.get(sj).x, cy = positions.get(sj).y;
       const dx = positions.get(tj).x, dy = positions.get(tj).y;
