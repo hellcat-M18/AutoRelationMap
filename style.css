@@ -250,8 +250,16 @@ button:hover { background: #d0dcea; }
   opacity: 0.15;
 }
 .label-group text.link-label.highlighted {
-  fill: #b06a00;
   opacity: 1;
+}
+.label-group text.link-label.highlighted-out {
+  fill: var(--graph-out);
+}
+.label-group text.link-label.highlighted-in {
+  fill: var(--graph-in);
+}
+.label-group text.link-label.highlighted-bidir {
+  fill: var(--graph-accent);
 }
 /* 非接続ノードをディム (検索ヒット中は除外) */
 .selection-active .node-group:not(.selected):not(.connected):not(.search-match) {

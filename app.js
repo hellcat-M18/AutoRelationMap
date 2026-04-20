@@ -302,6 +302,23 @@ function applySelectionState() {
       if (!selectedNodeId) return false;
       return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
     })
+    .classed('highlighted-out', link => {
+      if (!selectedNodeId) return false;
+      const split = isBidirSplit(link);
+      if (biDirPrimarySet.has(link.id) && !split) return false;
+      return getLinkSourceId(link) === selectedNodeId;
+    })
+    .classed('highlighted-in', link => {
+      if (!selectedNodeId) return false;
+      const split = isBidirSplit(link);
+      if (biDirPrimarySet.has(link.id) && !split) return false;
+      return getLinkTargetId(link) === selectedNodeId;
+    })
+    .classed('highlighted-bidir', link => {
+      if (!selectedNodeId || !biDirPrimarySet.has(link.id)) return false;
+      if (isBidirSplit(link)) return false;
+      return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
+    })
     .attr('transform', link => {
       const point = getLabelMidpoint(link);
       return `translate(${point.x},${point.y})`;
