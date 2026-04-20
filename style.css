@@ -1,6 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  --map-bg: #f0f4f8;
   --graph-accent: #1a6fa5;
   --graph-hover: #e03060;
   --graph-out: #ff7043;
@@ -12,7 +13,7 @@ body {
   height: 100vh;
   overflow: hidden;
   font-family: 'Segoe UI', sans-serif;
-  background: #f0f4f8;
+  background: var(--map-bg);
   color: #1a1a2e;
 }
 
@@ -175,6 +176,7 @@ button:hover { background: #d0dcea; }
   flex: 1;
   position: relative;
   overflow: hidden;
+  background: var(--map-bg);
 }
 
 #map-svg {
@@ -191,12 +193,6 @@ button:hover { background: #d0dcea; }
   marker-end: url(#arrow);
   cursor: pointer;
   transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
-}
-/* ズーム中はtransitionを無効化してちらつきを防止 */
-.zooming .link-group path,
-.zooming .node-group,
-.zooming .link-label {
-  transition: none !important;
 }
 .link-group path:hover {
   stroke: var(--graph-hover);
@@ -269,12 +265,12 @@ button:hover { background: #d0dcea; }
 }
 /* 非接続ノードをディム (検索ヒット中は除外) */
 .selection-active .node-group:not(.selected):not(.connected):not(.search-match) {
-  opacity: 0.18;
+  --node-selection-lod: 0.18;
 }
 /* 選択・接続ノードはLODを無視して全濃度 */
 .selection-active .node-group.selected,
 .selection-active .node-group.connected {
-  opacity: 1;
+  --node-selection-lod: 1;
 }
 /* 接続先ノードのリングをシアンに */
 .node-group.connected .node-ring {
@@ -301,12 +297,24 @@ button:hover { background: #d0dcea; }
 /* ノードグループ */
 .node-group {
   cursor: default;
-  opacity: var(--lod, 1);
+  --node-base-lod: 1;
+  --node-selection-lod: 1;
   touch-action: none;
   -webkit-tap-highlight-color: rgba(0,0,0,0);
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+.node-occluder {
+  fill: var(--map-bg);
+  pointer-events: none;
+}
+
+.node-group image,
+.node-group .node-ring,
+.node-group .node-label {
+  opacity: calc(var(--node-base-lod, 1) * var(--node-selection-lod, 1));
 }
 
 .node-ring {

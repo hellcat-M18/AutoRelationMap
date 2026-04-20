@@ -29,7 +29,6 @@ let modalCallback = null;
 let width = 0;
 let height = 0;
 let layoutRunId = 0;
-let currentZoomK = 1;
 
 // ---- パフォーマンス用キャッシュ ----
 let inDegreeCache = new Map();
@@ -40,38 +39,17 @@ let geometryCache = new Map();
 
 const svg = d3.select(`#${SVG_ID}`);
 
-let _lodRafId = null;
-let _zoomEndTimer = null;
-
 const zoomBehavior = d3.zoom()
   .scaleExtent([0.1, 5])
   .on('zoom', event => {
     mainGroup.attr('transform', event.transform);
-    currentZoomK = event.transform.k;
-
-    // ズーム中フラグ: CSS transitionを無効化してちらつきを防ぐ
-    svg.classed('zooming', true);
-    clearTimeout(_zoomEndTimer);
-    _zoomEndTimer = setTimeout(() => {
-      svg.classed('zooming', false);
-      updateLodStyles(); // ズーム終了後に確定更新
-    }, 150);
-
-    // rAFで1フレームに1回だけLOD更新（毎イベント更新を防ぐ）
-    if (_lodRafId === null) {
-      _lodRafId = requestAnimationFrame(() => {
-        _lodRafId = null;
-        updateLodStyles();
-      });
-    }
   });
 
 svg.call(zoomBehavior)
   .on('dblclick.zoom', null);
 
 const mainGroup = svg.append('g').attr('class', 'main-group');
-const linkGroup = mainGroup.append('g').attr('class', 'link-group')
-  .attr('mask', 'url(#link-mask)');
+const linkGroup = mainGroup.append('g').attr('class', 'link-group');
 const labelGroup = mainGroup.append('g').attr('class', 'label-group');
 const nodeGroup = mainGroup.append('g').attr('class', 'node-group-root');
 
@@ -201,12 +179,9 @@ function calcRadius(nodeId) {
 // ---- LOD: サイズ基準の濃度（最大の80%超は全濃、それ以下を2乗フェード） ----
 const LOD_FULL_RATIO = 0.8; // R_MAX のこの割合以上は opacity 1.0
 function calcLodOpacity(r) {
-  // ズームアウトしても減衰しない (k<1 は k=1 として扱う)
-  const effectiveK = Math.max(1, currentZoomK);
-  const effectiveR = r * effectiveK;
   const threshold = R_MAX * LOD_FULL_RATIO;
-  if (effectiveR >= threshold) return 1;
-  const t = Math.max(0, effectiveR / threshold);
+  if (r >= threshold) return 1;
+  const t = Math.max(0, r / threshold);
   // 2乗で大小の差を強調（小: 0.15、threshold到達: 1.0）
   return 0.15 + 0.85 * t * t;
 }
@@ -219,7 +194,7 @@ function linkLodOpacity(link) {
 
 function updateLodStyles() {
   nodeGroup.selectAll('g.node-group')
-    .style('--lod', node => calcLodOpacity(node.r));
+    .style('--node-base-lod', node => calcLodOpacity(node.r));
   linkGroup.selectAll('path.link-path')
     .style('--lod', link => linkLodOpacity(link));
   labelGroup.selectAll('text.link-label')
@@ -836,6 +811,7 @@ function syncGraphElements() {
     .attr('id', node => `clip-${node.id}`)
     .append('circle');
 
+  nodeEnter.append('circle').attr('class', 'node-occluder');
   nodeEnter.append('image');
   nodeEnter.append('circle').attr('class', 'node-ring');
   nodeEnter.append('text').attr('class', 'node-label');
@@ -851,6 +827,11 @@ function syncGraphElements() {
 
   nodeMerge.select('clipPath circle')
     .attr('r', node => node.r)
+    .attr('cx', 0)
+    .attr('cy', 0);
+
+  nodeMerge.select('.node-occluder')
+    .attr('r', node => node.r + 2)
     .attr('cx', 0)
     .attr('cy', 0);
 
@@ -888,16 +869,6 @@ function ticked() {
 
   nodeGroup.selectAll('g.node-group')
     .attr('transform', node => `translate(${node.x ?? 0},${node.y ?? 0})`);
-
-  // ノード円でリンクをくり抜くマスクを更新
-  const linkMask = d3.select('#link-mask');
-  const maskCircles = linkMask.selectAll('circle').data(nodes, n => n.id);
-  maskCircles.exit().remove();
-  maskCircles.enter().append('circle').attr('fill', 'black')
-    .merge(maskCircles)
-    .attr('cx', n => n.x ?? 0)
-    .attr('cy', n => n.y ?? 0)
-    .attr('r', n => n.r);
 }
 
 function getForceRadialTarget(node) {
