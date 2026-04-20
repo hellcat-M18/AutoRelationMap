@@ -52,7 +52,8 @@ svg.call(zoomBehavior)
   .on('dblclick.zoom', null);
 
 const mainGroup = svg.append('g').attr('class', 'main-group');
-const linkGroup = mainGroup.append('g').attr('class', 'link-group');
+const linkGroup = mainGroup.append('g').attr('class', 'link-group')
+  .attr('mask', 'url(#link-mask)');
 const labelGroup = mainGroup.append('g').attr('class', 'label-group');
 const nodeGroup = mainGroup.append('g').attr('class', 'node-group-root');
 
@@ -852,6 +853,16 @@ function ticked() {
 
   nodeGroup.selectAll('g.node-group')
     .attr('transform', node => `translate(${node.x ?? 0},${node.y ?? 0})`);
+
+  // ノード円でリンクをくり抜くマスクを更新
+  const linkMask = d3.select('#link-mask');
+  const maskCircles = linkMask.selectAll('circle').data(nodes, n => n.id);
+  maskCircles.exit().remove();
+  maskCircles.enter().append('circle').attr('fill', 'black')
+    .merge(maskCircles)
+    .attr('cx', n => n.x ?? 0)
+    .attr('cy', n => n.y ?? 0)
+    .attr('r', n => n.r);
 }
 
 function getForceRadialTarget(node) {
@@ -1051,6 +1062,11 @@ function restart({ layout = true, fit = layout, seed = false } = {}) {
 }
 
 function onArrowDragStart(event, node) {
+  // ドラッグ開始時に長押しタイマーをキャンセル（コンテキストメニューを抑止）
+  if (_longPressTimer !== null) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
+  }
   arrowSrc = node;
   dragLine
     .attr('x1', node.x)
@@ -1097,7 +1113,7 @@ function onNodeClick(event, node) {
 
 // ---- 長押しによるコンテキストメニュー (タッチ端末対応) ----
 let _longPressTimer = null;
-const LONG_PRESS_MS = 500;
+const LONG_PRESS_MS = 650;
 
 function onNodePointerDown(event, node) {
   // タッチのみ長押し検出。マウスは contextmenu イベントに任せる
