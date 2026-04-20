@@ -224,8 +224,8 @@ button:hover { background: #d0dcea; }
   fill: #b06a00;
   opacity: 1;
 }
-/* 非接続ノードをディム */
-.selection-active .node-group:not(.selected):not(.connected) {
+/* 非接続ノードをディム (検索ヒット中は除外) */
+.selection-active .node-group:not(.selected):not(.connected):not(.search-match) {
   opacity: 0.18;
 }
 /* 選択・接続ノードはLODを無視して全濃度 */
@@ -405,6 +405,64 @@ button:hover { background: #d0dcea; }
 #context-menu li:hover { background: #e8eef5; color: #1a6fa5; }
 #ctx-delete { color: #c0203a; }
 #ctx-delete:hover { background: #fde0e5; }
+
+/* ========== 検索バー ========== */
+#search-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #c8d4e0;
+  border-radius: 10px;
+  padding: 6px 10px;
+  box-shadow: 0 2px 12px #0002;
+  z-index: 50;
+}
+#search-bar.hidden { display: none; }
+#search-input {
+  border: none;
+  outline: none;
+  font-size: 0.9rem;
+  width: 160px;
+  color: #1a1a2e;
+  background: transparent;
+}
+#search-counter {
+  font-size: 0.8rem;
+  color: #7a8a9a;
+  min-width: 44px;
+  text-align: center;
+}
+#search-prev, #search-next {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  color: #334455;
+  border-radius: 4px;
+}
+#search-prev:hover, #search-next:hover { background: #e8eef5; }
+#search-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  color: #7a8a9a;
+  border-radius: 4px;
+}
+#search-close:hover { background: #e8eef5; color: #c0203a; }
+
+/* 検索ヒットノード（現在フォーカス以外） */
+.node-group.search-match .node-ring {
+  stroke: #e0820c;
+  stroke-width: 3;
+  opacity: 1;
+}
 
 /* ========== ツールチップ ========== */
 #tooltip {
@@ -592,4 +650,99 @@ button:hover { background: #d0dcea; }
 .detail-chip-icon--blank {
   background: #dde8f5;
   display: inline-block;
+}
+
+/* ========== ハンバーガーボタン（PC では非表示） ========== */
+#btn-hamburger {
+  display: none;
+}
+
+/* ========== モバイルオーバーレイ（PCでは非表示） ========== */
+#mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: #0005;
+  z-index: 40;
+}
+#mobile-overlay.visible { display: block; }
+
+/* ========== モバイル（640px 以下） ========== */
+@media (max-width: 640px) {
+  /* ハンバーガーボタン */
+  #btn-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 60;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: #ffffff;
+    border: 1px solid #c8d4e0;
+    box-shadow: 0 2px 8px #0002;
+    font-size: 1.1rem;
+    color: #1a6fa5;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  /* サイドバー → 左ドロワー */
+  #sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 260px;
+    min-width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 50;
+    box-shadow: 4px 0 20px #0003;
+  }
+  #sidebar.drawer-open {
+    transform: translateX(0);
+  }
+
+  /* 詳細パネル → ボトムシート */
+  #detail-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    max-height: 55vh;
+    border-left: none;
+    border-top: 1px solid #dde3ec;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 24px #0002;
+    transform: translateY(100%);
+    transition: transform 0.28s ease, width 0s;
+    z-index: 50;
+  }
+  #detail-panel.open {
+    transform: translateY(0);
+    width: 100% !important;
+  }
+
+  /* ボトムシート内のヘッダー・ボディの固定幅を解除 */
+  #detail-header,
+  #detail-body {
+    width: 100%;
+  }
+
+  /* 検索バー：ハンバーガーボタンの右に */
+  #search-bar {
+    left: 64px;
+    right: 12px;
+    top: 12px;
+  }
+  #search-input {
+    width: 100%;
+    min-width: 0;
+    flex: 1;
+  }
 }

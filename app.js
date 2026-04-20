@@ -19,6 +19,9 @@ let nextLinkId = 1;
 let biDirSet = new Set();
 let pendingDataUrl = null;
 let selectedNodeId = null;
+let searchMatches = [];      // マッチノードIDの配列
+let searchMatchSet = new Set();
+let searchIndex = 0;
 let arrowSrc = null;
 let ctxTarget = null;
 let modalCallback = null;
@@ -283,13 +286,38 @@ function nodeChip(n) {
   return `<span class="detail-chip">${imgTag}<span class="detail-other">${n.name}</span></span>`;
 }
 
+function isMobile() {
+  return window.matchMedia('(max-width: 640px)').matches;
+}
+
+function openDrawer() {
+  document.getElementById('sidebar').classList.add('drawer-open');
+  document.getElementById('mobile-overlay').classList.add('visible');
+  // ドロワーを開いたら詳細パネルを閉じる
+  document.getElementById('detail-panel').classList.remove('open');
+}
+
+function closeDrawer() {
+  document.getElementById('sidebar').classList.remove('drawer-open');
+  document.getElementById('mobile-overlay').classList.remove('visible');
+}
+
 function openDetailPanel(node) {
   renderDetailPanel(node);
   document.getElementById('detail-panel').classList.add('open');
+  // モバイルでは詳細パネルを開いたらドロワーを閉じ、オーバーレイを表示
+  if (isMobile()) {
+    document.getElementById('sidebar').classList.remove('drawer-open');
+    document.getElementById('mobile-overlay').classList.add('visible');
+  }
 }
 
 function closeDetailPanel() {
   document.getElementById('detail-panel').classList.remove('open');
+  // モバイルでは詳細パネルを閉じたらオーバーレイも消す
+  if (isMobile()) {
+    document.getElementById('mobile-overlay').classList.remove('visible');
+  }
 }
 
 function renderDetailPanel(node) {
@@ -437,6 +465,72 @@ function focusNode(node, duration = 500) {
     .scale(k)
     .translate(-node.x, -node.y);
   svg.transition().duration(duration).call(zoomBehavior.transform, transform);
+}
+
+// ---- 検索 ----
+function openSearch() {
+  document.getElementById('search-bar').classList.remove('hidden');
+  const input = document.getElementById('search-input');
+  input.focus();
+  input.select();
+}
+
+function closeSearch() {
+  document.getElementById('search-bar').classList.add('hidden');
+  document.getElementById('search-input').value = '';
+  searchMatches = [];
+  searchMatchSet.clear();
+  searchIndex = 0;
+  nodeGroup.selectAll('g.node-group').classed('search-match', false);
+  updateSearchCounter();
+}
+
+function updateSearchCounter() {
+  const el = document.getElementById('search-counter');
+  el.textContent = searchMatches.length === 0 ? '' : `${searchIndex + 1} / ${searchMatches.length}`;
+}
+
+function updateSearch() {
+  const query = document.getElementById('search-input').value.trim();
+  if (!query) {
+    searchMatches = [];
+    searchMatchSet.clear();
+    searchIndex = 0;
+    nodeGroup.selectAll('g.node-group').classed('search-match', false);
+    updateSearchCounter();
+    return;
+  }
+  const lower = query.toLowerCase();
+  searchMatches = nodes
+    .filter(n => n.name.toLowerCase().includes(lower))
+    .map(n => n.id);
+  searchMatchSet = new Set(searchMatches);
+  searchIndex = 0;
+  nodeGroup.selectAll('g.node-group').classed('search-match', node => searchMatchSet.has(node.id));
+  if (searchMatches.length > 0) navigateToSearchMatch();
+  updateSearchCounter();
+}
+
+function navigateToSearchMatch() {
+  if (searchMatches.length === 0) return;
+  const id = searchMatches[searchIndex];
+  selectedNodeId = id;
+  applySelectionState();
+  const node = nodeById(id);
+  if (node) focusNode(node);
+  updateSearchCounter();
+}
+
+function searchNext() {
+  if (searchMatches.length === 0) return;
+  searchIndex = (searchIndex + 1) % searchMatches.length;
+  navigateToSearchMatch();
+}
+
+function searchPrev() {
+  if (searchMatches.length === 0) return;
+  searchIndex = (searchIndex - 1 + searchMatches.length) % searchMatches.length;
+  navigateToSearchMatch();
 }
 
 function computeCurve(link) {
@@ -899,6 +993,16 @@ document.getElementById('detail-close').addEventListener('click', () => {
   clearSelection();
 });
 
+// ハンバーガー・モバイルオーバーレイ
+document.getElementById('btn-hamburger').addEventListener('click', () => {
+  const isOpen = document.getElementById('sidebar').classList.contains('drawer-open');
+  if (isOpen) closeDrawer(); else openDrawer();
+});
+document.getElementById('mobile-overlay').addEventListener('click', () => {
+  closeDrawer();
+  clearSelection(); // 詳細パネルも閉じる
+});
+
 document.getElementById('ctx-delete').addEventListener('click', () => {
   if (!ctxTarget) return;
   const targetId = ctxTarget.id;
@@ -1013,6 +1117,26 @@ svg.on('click.selection', () => clearSelection());
 document.addEventListener('click', () => hideContextMenu());
 document.addEventListener('contextmenu', event => {
   if (!event.defaultPrevented) hideContextMenu();
+});
+
+// 検索バーイベント
+document.getElementById('search-input').addEventListener('input', updateSearch);
+document.getElementById('search-input').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    if (event.shiftKey) searchPrev(); else searchNext();
+  } else if (event.key === 'Escape') {
+    closeSearch();
+  }
+});
+document.getElementById('search-prev').addEventListener('click', searchPrev);
+document.getElementById('search-next').addEventListener('click', searchNext);
+document.getElementById('search-close').addEventListener('click', closeSearch);
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+    event.preventDefault();
+    openSearch();
+  }
 });
 
 document.getElementById('context-menu').addEventListener('click', event => {
