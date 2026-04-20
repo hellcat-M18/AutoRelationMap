@@ -40,20 +40,26 @@ let geometryCache = new Map();
 
 const svg = d3.select(`#${SVG_ID}`);
 
+// ---- ズーム終了にLODを更新する（debounce）----
+let _zoomEndTimer = null;
+const ZOOM_END_DELAY = 150;
+
 const zoomBehavior = d3.zoom()
   .scaleExtent([0.1, 5])
   .on('zoom', event => {
     mainGroup.attr('transform', event.transform);
     currentZoomK = event.transform.k;
-    updateLodStyles();
+    canvasTransform = event.transform;
+    drawLinksCanvas(); // canvasは毎フレーム高速再描画
+    clearTimeout(_zoomEndTimer);
+    _zoomEndTimer = setTimeout(updateLodStyles, ZOOM_END_DELAY);
   });
 
 svg.call(zoomBehavior)
   .on('dblclick.zoom', null);
 
 const mainGroup = svg.append('g').attr('class', 'main-group');
-const linkGroup = mainGroup.append('g').attr('class', 'link-group')
-  .attr('mask', 'url(#link-mask)');
+const linkGroup = mainGroup.append('g').attr('class', 'link-group'); // 不視覆パス（当たり判定用）
 const labelGroup = mainGroup.append('g').attr('class', 'label-group');
 const nodeGroup = mainGroup.append('g').attr('class', 'node-group-root');
 
@@ -199,13 +205,123 @@ function linkLodOpacity(link) {
   return Math.min(calcLodOpacity(s?.r ?? R_BASE), calcLodOpacity(tg?.r ?? R_BASE));
 }
 
+// ---- Canvas リンクレンダラ ----
+const CANVAS_ACCENT = '#1a6fa5';
+const CANVAS_OUT    = '#ff7043';
+const CANVAS_IN     = '#42a5f5';
+const ARROW_SIZE = 10;
+const ARROW_HALF_ANGLE = Math.atan2(3.5, 10); // SVG marker "0 0, 10 3.5, 0 7" 相当
+
+let canvasTransform = d3.zoomIdentity;
+const linkCanvas = document.getElementById('link-canvas');
+const linkCtx = linkCanvas.getContext('2d');
+
+function resizeLinkCanvas() {
+  const el = document.getElementById(SVG_ID);
+  const dpr = devicePixelRatio || 1;
+  const w = el.clientWidth || 800;
+  const h = el.clientHeight || 600;
+  if (linkCanvas.width === w * dpr && linkCanvas.height === h * dpr) return;
+  linkCanvas.width  = w * dpr;
+  linkCanvas.height = h * dpr;
+}
+
+function getLinkCanvasStyle(link) {
+  const isBidir = biDirPrimarySet.has(link.id);
+  const isSecondary = biDirSecondarySet.has(link.id);
+  const split = isBidirSplit(link);
+  if (isSecondary && !split) return null; // セカンダリはスプリット時のみ描画
+
+  let color = CANVAS_ACCENT;
+  let width = isBidir ? 3 : 1.5;
+  let hasStartArrow = isBidir && !split;
+  let dimOpacity = 1;
+
+  if (selectedNodeId) {
+    const src = getLinkSourceId(link);
+    const tgt = getLinkTargetId(link);
+    const isHighlightedBidir = isBidir && !split && (src === selectedNodeId || tgt === selectedNodeId);
+    const isHighlightedOut   = !isHighlightedBidir && src === selectedNodeId;
+    const isHighlightedIn    = !isHighlightedBidir && tgt === selectedNodeId;
+    const isConnected = src === selectedNodeId || tgt === selectedNodeId;
+
+    if (isHighlightedBidir)    { color = CANVAS_ACCENT; width = 4; hasStartArrow = true; }
+    else if (isHighlightedOut) { color = CANVAS_OUT; width = 2.5; }
+    else if (isHighlightedIn)  { color = CANVAS_IN;  width = 2.5; }
+    if (!isConnected) dimOpacity = 0.2;
+  }
+
+  return { color, width, opacity: linkLodOpacity(link) * dimOpacity, hasStartArrow };
+}
+
+function drawArrowhead(ctx, fromX, fromY, toX, toY) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(
+    toX - ARROW_SIZE * Math.cos(angle - ARROW_HALF_ANGLE),
+    toY - ARROW_SIZE * Math.sin(angle - ARROW_HALF_ANGLE)
+  );
+  ctx.lineTo(
+    toX - ARROW_SIZE * Math.cos(angle + ARROW_HALF_ANGLE),
+    toY - ARROW_SIZE * Math.sin(angle + ARROW_HALF_ANGLE)
+  );
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawLinksCanvas() {
+  resizeLinkCanvas();
+  const dpr = devicePixelRatio || 1;
+  const ctx = linkCtx;
+  ctx.clearRect(0, 0, linkCanvas.width, linkCanvas.height);
+  if (links.length === 0) return;
+
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  const t = canvasTransform;
+  ctx.translate(t.x, t.y);
+  ctx.scale(t.k, t.k);
+
+  // ノード円でくり抜きクリップ (even-odd: 外側矩形 + 反時計回りのノード円 = 円内を除外)
+  ctx.beginPath();
+  ctx.rect(-1e7, -1e7, 2e7, 2e7);
+  nodes.forEach(n => ctx.arc(n.x ?? 0, n.y ?? 0, n.r, 0, Math.PI * 2, true));
+  ctx.clip('evenodd');
+
+  links.forEach(link => {
+    const style = getLinkCanvasStyle(link);
+    if (!style || style.opacity < 0.01) return;
+    const geo = computeLinkGeometry(link);
+    if (!geo) return;
+
+    ctx.save();
+    ctx.globalAlpha = style.opacity;
+    ctx.strokeStyle = style.color;
+    ctx.fillStyle   = style.color;
+    ctx.lineWidth   = style.width;
+    ctx.lineCap     = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(geo.sx, geo.sy);
+    ctx.lineTo(geo.ex, geo.ey);
+    ctx.stroke();
+
+    drawArrowhead(ctx, geo.sx, geo.sy, geo.ex, geo.ey);
+    if (style.hasStartArrow) drawArrowhead(ctx, geo.ex, geo.ey, geo.sx, geo.sy);
+    ctx.restore();
+  });
+
+  ctx.restore();
+}
+
 function updateLodStyles() {
   nodeGroup.selectAll('g.node-group')
     .style('--lod', node => calcLodOpacity(node.r));
-  linkGroup.selectAll('path.link-path')
-    .style('--lod', link => linkLodOpacity(link));
+  // リンク LOD は canvas が linkLodOpacity() で処理するため SVG は更新不要
   labelGroup.selectAll('text.link-label')
     .style('--lod', link => linkLodOpacity(link));
+  drawLinksCanvas(); // LOD変化をcanvasに反映
 }
 
 function updateAllRadii() {
@@ -261,38 +377,14 @@ function applySelectionState() {
     .classed('selected',  node => node.id === selectedNodeId)
     .classed('connected', node => connectedIds.has(node.id));
 
-  linkGroup.selectAll('path.link-path')
-    .classed('highlighted-out', link => {
-      if (!selectedNodeId) return false;
-      const split = isBidirSplit(link);
-      // 非スプリット双方向プライマリは highlighted-bidir を使う
-      if (biDirPrimarySet.has(link.id) && !split) return false;
-      return getLinkSourceId(link) === selectedNodeId;
-    })
-    .classed('highlighted-in', link => {
-      if (!selectedNodeId) return false;
-      const split = isBidirSplit(link);
-      if (biDirPrimarySet.has(link.id) && !split) return false;
-      return getLinkTargetId(link) === selectedNodeId;
-    })
-    .classed('highlighted-bidir', link => {
-      if (!selectedNodeId || !biDirPrimarySet.has(link.id)) return false;
-      if (isBidirSplit(link)) return false; // スプリット時は out/in に委ねる
-      return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
-    })
-    .classed('link-bidir-secondary-visible', link => {
-      if (!biDirSecondarySet.has(link.id)) return false;
-      return isBidirSplit(link);
-    })
-    .attr('marker-start', link => {
-      if (!biDirPrimarySet.has(link.id)) return null;
-      return isBidirSplit(link) ? null : 'url(#arrow-bidir-start)';
-    });
-
-  // スプリット時はジオメトリが変わるのでパスとラベル位置を再描画
+  // スプリット時はジオメトリが変わるのでキャッシュをクリアしSVGパス(=当たり判定)を再計算
   geometryCache.clear();
   linkGroup.selectAll('path.link-path').attr('d', link => computePath(link));
 
+  // canvas がリンクを描画 (色・太さ・透明度すべて担当)
+  drawLinksCanvas();
+
+  // セカンダリラベル表示制御
   labelGroup.selectAll('text.link-label')
     .classed('link-bidir-secondary-visible', link => {
       if (!biDirSecondarySet.has(link.id)) return false;
@@ -781,10 +873,7 @@ function syncGraphElements() {
     .on('mouseover', (event, link) => showTooltip(event, link.label || '（ラベルなし）'))
     .on('mouseout', hideTooltip);
 
-  linkEnter.merge(linkSelection)
-    .attr('marker-start', link => biDirPrimarySet.has(link.id) ? 'url(#arrow-bidir-start)' : null)
-    .classed('link-bidir', link => biDirPrimarySet.has(link.id))
-    .classed('link-bidir-secondary', link => biDirSecondarySet.has(link.id));
+  linkEnter.merge(linkSelection); // marker・highlightクラスはcanvasが担当
 
   const labelSelection = labelGroup.selectAll('text.link-label')
     .data(links, link => link.id);
@@ -859,6 +948,7 @@ function syncGraphElements() {
 function ticked() {
   geometryCache.clear();
 
+  // SVGパスは当たり判定用のみ更新 (描画はcanvas)
   linkGroup.selectAll('path.link-path')
     .attr('d', link => computePath(link));
 
@@ -871,15 +961,7 @@ function ticked() {
   nodeGroup.selectAll('g.node-group')
     .attr('transform', node => `translate(${node.x ?? 0},${node.y ?? 0})`);
 
-  // ノード円でリンクをくり抜くマスクを更新
-  const linkMask = d3.select('#link-mask');
-  const maskCircles = linkMask.selectAll('circle').data(nodes, n => n.id);
-  maskCircles.exit().remove();
-  maskCircles.enter().append('circle').attr('fill', 'black')
-    .merge(maskCircles)
-    .attr('cx', n => n.x ?? 0)
-    .attr('cy', n => n.y ?? 0)
-    .attr('r', n => n.r);
+  drawLinksCanvas();
 }
 
 function getForceRadialTarget(node) {
@@ -1505,6 +1587,7 @@ document.getElementById('context-menu').addEventListener('click', event => {
 
 window.addEventListener('resize', () => {
   getSvgSize();
+  resizeLinkCanvas();
   if (nodes.length === 0) return;
   fitView(0);
 });

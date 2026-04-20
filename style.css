@@ -177,73 +177,43 @@ button:hover { background: #d0dcea; }
   overflow: hidden;
 }
 
-#map-svg {
-  width: 100%;
-  height: 100%;
+/* Canvas リンクレンダラ: SVGの上に重ねるが pointer-events は通過させる */
+#link-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
 }
 
-/* リンク（矢印線） */
+#map-svg {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+
+/* GPUレイヤー昇格でズーム・パンをハードウェア合成 */
+.main-group {
+  will-change: transform;
+}
+
+/* リンク（矢印線）— Canvas で描画するため、SVG パスは当たり判定用の透明ストロークのみ */
 .link-group path {
   fill: none;
-  stroke: var(--graph-accent);
-  stroke-width: 1.5;
-  opacity: var(--lod, 1);
-  marker-end: url(#arrow);
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
   cursor: pointer;
-  transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
 }
-.link-group path:hover {
-  stroke: var(--graph-hover);
-  stroke-width: 2.5;
-  opacity: 1;
-  marker-end: url(#arrow-hover);
-}
-/* 選択中ノードから出る線：オレンジ */
-.link-group path.highlighted-out {
-  stroke: var(--graph-out);
-  stroke-width: 2.5;
-  opacity: 1;
-  marker-end: url(#arrow-out);
-}
-/* 選択中ノードへ入る線：ブルー */
-.link-group path.highlighted-in {
-  stroke: var(--graph-in);
-  stroke-width: 2.5;
-  opacity: 1;
-  marker-end: url(#arrow-in);
-}
-/* 双方向リンク：太い直線 */
-.link-group path.link-bidir {
-  stroke-width: 3;
-}
-/* スプリット時（ハイライト中）は通常の太さに戻す */
-.link-group path.link-bidir.highlighted-out,
-.link-group path.link-bidir.highlighted-in {
-  stroke-width: 2.5;
-}
-/* 双方向セカンダリリンク（逆方向）はデフォルト非表示 */
+/* セカンダリライン（双方向逆方向）: クリックイベント不要 */
 .link-group path.link-bidir-secondary {
-  display: none;
+  pointer-events: none;
 }
-.link-group path.link-bidir-secondary.link-bidir-secondary-visible {
-  display: block;
-}
-/* セカンダリラベル非表示 */
+/* セカンダリラベル: 非表示 */
 .label-group text.link-label.link-bidir-secondary {
   display: none;
 }
 .label-group text.link-label.link-bidir-secondary.link-bidir-secondary-visible {
   display: block;
-}
-/* 双方向リンクのハイライト */
-.link-group path.highlighted-bidir {
-  stroke: var(--graph-accent);
-  stroke-width: 4;
-  opacity: 1;
-}
-/* 非接続リンクは薄暮らす */
-.selection-active .link-group path:not(.highlighted-out):not(.highlighted-in):not(.highlighted-bidir) {
-  opacity: 0.2;
 }
 /* 非接続ノードのラベルも薄暮らす */
 .selection-active .label-group text.link-label:not(.highlighted) {
