@@ -780,26 +780,96 @@ function getForceRadialTarget(node) {
   return maxRadius * (1 - inDeg / (maxInDeg + 1)) * 0.85;
 }
 
-function runForceLayout({ fit = true, seed = false } = {}) {
-  beginLayout();
-  if (seed || nodes.some(node => !Number.isFinite(node.x) || !Number.isFinite(node.y))) {
-    seedPivotMdsPositions();
-  }
+// 2線分の交差判定 (端点共有は除く)
+function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+  const dx1 = bx - ax, dy1 = by - ay;
+  const dx2 = dx - cx, dy2 = dy - cy;
+  const denom = dx1 * dy2 - dy1 * dx2;
+  if (Math.abs(denom) < 1e-10) return false;
+  const t = ((cx - ax) * dy2 - (cy - ay) * dx2) / denom;
+  const u = ((cx - ax) * dy1 - (cy - ay) * dx1) / denom;
+  return t > 0.001 && t < 0.999 && u > 0.001 && u < 0.999;
+}
 
-  simulation.force('center', d3.forceCenter(width / 2, height / 2));
-  simulation.force('radial', d3.forceRadial(node => getForceRadialTarget(node), width / 2, height / 2).strength(0.18));
+// ノード座標配列を使って交差数をカウント (O(m²))
+function countCrossings(positions) {
+  let count = 0;
+  for (let i = 0; i < links.length; i++) {
+    const si = getLinkSourceId(links[i]);
+    const ti = getLinkTargetId(links[i]);
+    const ax = positions.get(si).x, ay = positions.get(si).y;
+    const bx = positions.get(ti).x, by = positions.get(ti).y;
+    for (let j = i + 1; j < links.length; j++) {
+      const sj = getLinkSourceId(links[j]);
+      const tj = getLinkTargetId(links[j]);
+      if (sj === si || sj === ti || tj === si || tj === ti) continue;
+      const cx = positions.get(sj).x, cy = positions.get(sj).y;
+      const dx = positions.get(tj).x, dy = positions.get(tj).y;
+      if (segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy)) count++;
+    }
+  }
+  return count;
+}
+
+// 1回分のシミュレーションを走らせ、結果の座標マップを返す
+function runOneTrial() {
+  seedPivotMdsPositions();
   simulation.nodes(nodes);
   simulation.force('link').links(links);
   simulation.force('collide').radius(node => node.r + COLLIDE_PADDING);
   simulation.alpha(1);
-
-  // レイアウト計算中は DOM 更新を止めて高速化
   simulation.on('tick', null);
   const ticks = getSimulationTickCount(1, 0.001);
-  for (let index = 0; index < ticks; index += 1) {
-    simulation.tick();
-  }
+  for (let i = 0; i < ticks; i++) simulation.tick();
   simulation.on('tick', ticked);
+  const pos = new Map();
+  nodes.forEach(n => pos.set(n.id, { x: n.x, y: n.y }));
+  return pos;
+}
+
+// 座標マップをノードに適用
+function applyPositions(positions) {
+  nodes.forEach(n => {
+    const p = positions.get(n.id);
+    if (p) { n.x = p.x; n.y = p.y; n.vx = 0; n.vy = 0; }
+  });
+}
+
+const LAYOUT_TRIALS = 3;
+
+function runForceLayout({ fit = true, seed = false } = {}) {
+  beginLayout();
+  getSvgSize();
+
+  simulation.force('center', d3.forceCenter(width / 2, height / 2));
+  simulation.force('radial', d3.forceRadial(node => getForceRadialTarget(node), width / 2, height / 2).strength(0.08));
+  simulation.nodes(nodes);
+  simulation.force('link').links(links);
+  simulation.force('collide').radius(node => node.r + COLLIDE_PADDING);
+
+  // 既存座標が有効かつ seed 不要なら1回だけ走らせる
+  const needSeed = seed || nodes.some(n => !Number.isFinite(n.x) || !Number.isFinite(n.y));
+
+  if (!needSeed || links.length < 2) {
+    // seed 不要 or リンクが少なくて交差ゼロ確定 → 1回
+    if (needSeed) seedPivotMdsPositions();
+    simulation.alpha(1);
+    simulation.on('tick', null);
+    const ticks = getSimulationTickCount(1, 0.001);
+    for (let i = 0; i < ticks; i++) simulation.tick();
+    simulation.on('tick', ticked);
+  } else {
+    // 複数回走らせて交差最小の結果を採用
+    let bestPos = null;
+    let bestCross = Infinity;
+    for (let trial = 0; trial < LAYOUT_TRIALS; trial++) {
+      const pos = runOneTrial();
+      const cross = countCrossings(pos);
+      if (cross < bestCross) { bestCross = cross; bestPos = pos; }
+      if (cross === 0) break; // 完全に交差なし → 即採用
+    }
+    applyPositions(bestPos);
+  }
 
   ticked();
   applySelectionState();
