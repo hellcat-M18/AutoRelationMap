@@ -178,13 +178,16 @@ function calcRadius(nodeId) {
   return Math.round(R_MIN + (R_MAX - R_MIN) * t);
 }
 
-// ---- LOD: サイズ基準の濃度（2乗 + ズーム連動） ----
+// ---- LOD: サイズ基準の濃度（最大の80%超は全濃、それ以下を2乗フェード） ----
+const LOD_FULL_RATIO = 0.8; // R_MAX のこの割合以上は opacity 1.0
 function calcLodOpacity(r) {
   // ズームアウトしても減衰しない (k<1 は k=1 として扱う)
   const effectiveK = Math.max(1, currentZoomK);
   const effectiveR = r * effectiveK;
-  const t = Math.max(0, Math.min(1, (effectiveR - R_MIN) / (R_MAX - R_MIN)));
-  // 2乗で大小の差を強調（小: 0.15、大: 1.0）
+  const threshold = R_MAX * LOD_FULL_RATIO;
+  if (effectiveR >= threshold) return 1;
+  const t = Math.max(0, effectiveR / threshold);
+  // 2乗で大小の差を強調（小: 0.15、threshold到達: 1.0）
   return 0.15 + 0.85 * t * t;
 }
 
