@@ -63,7 +63,7 @@ const dragLine = mainGroup.append('line')
 function forceAsymmetricLink() {
   let _links = [];
   let _distanceFn = () => 100;
-  let _strengthFn = () => 0.25;
+  let _strength = 0.25;
 
   function force(alpha) {
     _links.forEach(link => {
@@ -75,8 +75,7 @@ function forceAsymmetricLink() {
       const dy = (target.y + (target.vy || 0)) - (source.y + (source.vy || 0));
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
       const desired = _distanceFn(link);
-      const s = _strengthFn(link);
-      const k = (dist - desired) / dist * alpha * s;
+      const k = (dist - desired) / dist * alpha * _strength;
 
       // ターゲットのみ引き寄せる（ソースは動かさない）
       target.vx -= dx * k;
@@ -97,19 +96,12 @@ function forceAsymmetricLink() {
   };
 
   force.strength = function(s) {
-    if (!arguments.length) return _strengthFn;
-    _strengthFn = typeof s === 'function' ? s : () => +s;
+    if (!arguments.length) return _strength;
+    _strength = +s;
     return force;
   };
 
   return force;
-}
-
-// リンクがクラスタ間かどうか判定
-function isInterClusterLink(link) {
-  const sid = getLinkSourceId(link);
-  const tid = getLinkTargetId(link);
-  return clusterMap.has(sid) && clusterMap.has(tid) && clusterMap.get(sid) !== clusterMap.get(tid);
 }
 
 const simulation = d3.forceSimulation()
@@ -117,17 +109,11 @@ const simulation = d3.forceSimulation()
   .force('link', forceAsymmetricLink().distance(link => {
     const source = getLinkSourceNode(link);
     const target = getLinkTargetNode(link);
-    const baseDistance = (source?.r ?? R_BASE) + (target?.r ?? R_BASE) + FORCE_LINK_GAP;
-    // クラスタ間リンクは距離を大きくしてクラスタ間を広げる
-    return isInterClusterLink(link) ? baseDistance * 1.6 : baseDistance;
-  }).strength(link => {
-    // クラスタ内は強く引き、クラスタ間は弱く
-    return isInterClusterLink(link) ? 0.08 : 0.3;
-  }))
+    return (source?.r ?? R_BASE) + (target?.r ?? R_BASE) + FORCE_LINK_GAP;
+  }).strength(0.25))
   .force('charge', d3.forceManyBody().strength(-2200).distanceMax(1200))
   .force('center', d3.forceCenter())
   .force('collide', d3.forceCollide().radius(node => node.r + COLLIDE_PADDING).strength(1))
-  .force('cluster', forceCluster().strength(0.15))
   .on('tick', ticked);
 
 function nodeById(id) {
@@ -410,73 +396,6 @@ function renderDetailPanel(node) {
   }
 }
 
-// ---- クラスタ検出（ラベル伝搬法） ----
-// 密に繋がったノード群を自動でグループ分けする
-let clusterMap = new Map();  // nodeId → clusterId
-let clusterList = [];        // [{id, members:[nodeId,...]}]
-
-function detectClusters() {
-  // 無向隣接マップ
-  const adj = new Map();
-  nodes.forEach(n => adj.set(n.id, []));
-  links.forEach(link => {
-    const s = getLinkSourceId(link);
-    const t = getLinkTargetId(link);
-    adj.get(s)?.push(t);
-    adj.get(t)?.push(s);
-  });
-
-  // 初期ラベル = 各ノードのID
-  const label = new Map();
-  nodes.forEach(n => label.set(n.id, n.id));
-
-  // ラベル伝搬：各ノードが隣接ノードで最も多いラベルに染まる
-  const MAX_ITER = 15;
-  const ids = nodes.map(n => n.id);
-  for (let iter = 0; iter < MAX_ITER; iter++) {
-    let changed = false;
-    // ランダム順で更新（偏りを防ぐ）
-    const shuffled = [...ids].sort(() => Math.random() - 0.5);
-    for (const id of shuffled) {
-      const neighbors = adj.get(id);
-      if (!neighbors || neighbors.length === 0) continue;
-      // 隣接ラベルの頻度カウント
-      const freq = new Map();
-      for (const nid of neighbors) {
-        const l = label.get(nid);
-        freq.set(l, (freq.get(l) ?? 0) + 1);
-      }
-      // 最頻ラベル（同数なら小さいID優先で安定化）
-      let bestLabel = label.get(id), bestCount = 0;
-      freq.forEach((count, l) => {
-        if (count > bestCount || (count === bestCount && l < bestLabel)) {
-          bestCount = count; bestLabel = l;
-        }
-      });
-      if (bestLabel !== label.get(id)) {
-        label.set(id, bestLabel);
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-
-  // ラベル → クラスタID に正規化
-  clusterMap = new Map();
-  const groupMap = new Map();
-  label.forEach((l, id) => {
-    if (!groupMap.has(l)) groupMap.set(l, []);
-    groupMap.get(l).push(id);
-  });
-  clusterList = [];
-  let cid = 0;
-  groupMap.forEach((members) => {
-    clusterList.push({ id: cid, members });
-    members.forEach(nid => clusterMap.set(nid, cid));
-    cid++;
-  });
-}
-
 // ---- ピボットMDS: グラフ距離をもとにした初期配置 ----
 // 繋がりが近いノードを最初から近くに置くことで交差を大幅に削減する
 function bfsDistances(startId, adjMap) {
@@ -507,28 +426,7 @@ function seedPivotMdsPositions() {
     return;
   }
 
-  detectClusters();
-
-  // クラスタ重心を円周上に配置（大きいクラスタほど多くの空間を占める）
-  const numClusters = clusterList.length;
-  const outerRadius = Math.min(width, height) * 0.32;
-  const cx = width / 2, cy = height / 2;
-
-  // クラスタごとの角度幅をメンバー数に比例させる
-  const totalMembers = nodes.length;
-  let angleStart = 0;
-  const clusterCenters = new Map(); // clusterId → {x, y, angle, span}
-
-  clusterList.forEach(cluster => {
-    const span = (cluster.members.length / totalMembers) * Math.PI * 2;
-    const midAngle = angleStart + span / 2;
-    const centerX = numClusters === 1 ? cx : cx + Math.cos(midAngle) * outerRadius;
-    const centerY = numClusters === 1 ? cy : cy + Math.sin(midAngle) * outerRadius;
-    clusterCenters.set(cluster.id, { x: centerX, y: centerY, angle: midAngle, span });
-    angleStart += span;
-  });
-
-  // 各クラスタ内でMDS配置
+  // 無向隣接マップを構築
   const adj = new Map();
   nodes.forEach(n => adj.set(n.id, []));
   links.forEach(link => {
@@ -538,59 +436,44 @@ function seedPivotMdsPositions() {
     adj.get(t)?.push(s);
   });
 
-  clusterList.forEach(cluster => {
-    const center = clusterCenters.get(cluster.id);
-    const members = cluster.members;
+  // ピボット1: 入次数最大ノード（最も参照されている＝中心的）
+  const pivot1Id = nodes.reduce((best, n) =>
+    getInDegree(n.id) > getInDegree(best.id) ? n : best, nodes[0]).id;
 
-    if (members.length === 1) {
-      const node = nodeById(members[0]);
-      if (node) { node.x = center.x; node.y = center.y; node.vx = 0; node.vy = 0; }
-      return;
-    }
+  // ピボット1からBFS → 最遠ノードをピボット2に
+  const dist1 = bfsDistances(pivot1Id, adj);
+  let pivot2Id = pivot1Id;
+  let maxDist = -1;
+  dist1.forEach((d, id) => { if (d > maxDist && id !== pivot1Id) { maxDist = d; pivot2Id = id; } });
+  if (pivot2Id === pivot1Id) {
+    pivot2Id = nodes.find(n => n.id !== pivot1Id)?.id ?? pivot1Id;
+  }
 
-    // クラスタ内サブグラフでBFS（ピボット2点）
-    const subAdj = new Map();
-    const memberSet = new Set(members);
-    members.forEach(id => {
-      subAdj.set(id, (adj.get(id) ?? []).filter(n => memberSet.has(n)));
-    });
+  const dist2 = bfsDistances(pivot2Id, adj);
 
-    // ピボット1: クラスタ内の入次数最大
-    const pivot1 = members.reduce((best, id) =>
-      getInDegree(id) > getInDegree(best) ? id : best, members[0]);
-    const dist1 = bfsDistances(pivot1, subAdj);
+  // dist1 → X軸、dist2 → Y軸 としてキャンバスにスケール
+  const xs = nodes.map(n => dist1.get(n.id) ?? 0);
+  const ys = nodes.map(n => dist2.get(n.id) ?? 0);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
 
-    // ピボット2: pivot1から最遠
-    let pivot2 = pivot1, maxD = -1;
-    members.forEach(id => {
-      const d = dist1.get(id) ?? 0;
-      if (d > maxD && id !== pivot1) { maxD = d; pivot2 = id; }
-    });
-    if (pivot2 === pivot1) pivot2 = members.find(id => id !== pivot1) ?? pivot1;
-    const dist2 = bfsDistances(pivot2, subAdj);
+  const margin = Math.min(width, height) * 0.12;
+  const scaleX = (width  - margin * 2) / rangeX;
+  const scaleY = (height - margin * 2) / rangeY;
+  const scale  = Math.min(scaleX, scaleY) * 0.82;
+  const cx = width / 2;
+  const cy = height / 2;
 
-    // MDS座標算出
-    const xs = members.map(id => dist1.get(id) ?? 0);
-    const ys = members.map(id => dist2.get(id) ?? 0);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
-    const rangeX = maxX - minX || 1;
-    const rangeY = maxY - minY || 1;
-
-    // クラスタ内の配置半径（メンバー数に比例）
-    const clusterRadius = Math.max(80, Math.sqrt(members.length) * 60);
-    const scale = clusterRadius / Math.max(rangeX, rangeY);
-
-    members.forEach((id, i) => {
-      const node = nodeById(id);
-      if (!node) return;
-      const nx = xs[i] - (minX + maxX) / 2;
-      const ny = ys[i] - (minY + maxY) / 2;
-      node.x = center.x + nx * scale + (Math.random() - 0.5) * 14;
-      node.y = center.y + ny * scale + (Math.random() - 0.5) * 14;
-      node.vx = 0;
-      node.vy = 0;
-    });
+  nodes.forEach((node, i) => {
+    const nx = xs[i] - (minX + maxX) / 2;
+    const ny = ys[i] - (minY + maxY) / 2;
+    // 同距離ノードが重ならないよう微小ジッターを加える
+    node.x = cx + nx * scale + (Math.random() - 0.5) * 18;
+    node.y = cy + ny * scale + (Math.random() - 0.5) * 18;
+    node.vx = 0;
+    node.vy = 0;
   });
 }
 
@@ -734,6 +617,81 @@ function searchPrev() {
   navigateToSearchMatch();
 }
 
+// ---- エッジルーティング: リンクがノードを迂回する ----
+const ROUTE_MARGIN = 22;
+
+function pointToSegmentDist(px, py, ax, ay, bx, by) {
+  const adx = bx - ax, ady = by - ay;
+  const lenSq = adx * adx + ady * ady;
+  if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+  const t = Math.max(0, Math.min(1, ((px - ax) * adx + (py - ay) * ady) / lenSq));
+  return Math.hypot(px - (ax + t * adx), py - (ay + t * ady));
+}
+
+function computeLinkRoute(link) {
+  const source = getLinkSourceNode(link);
+  const target = getLinkTargetNode(link);
+  if (!source || !target || source === target) return [];
+
+  // 始点→終点のパスを反復的に迂回させる
+  let pts = [{ x: source.x, y: source.y }, { x: target.x, y: target.y }];
+
+  for (let iter = 0; iter < 4; iter++) {
+    let changed = false;
+    const next = [pts[0]];
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const sdx = b.x - a.x, sdy = b.y - a.y;
+      const slen = Math.sqrt(sdx * sdx + sdy * sdy) || 1;
+      const slenSq = sdx * sdx + sdy * sdy;
+
+      // このサブセグメントで最も深く食い込んでいるノードを探す
+      let worst = null;
+      let worstOverlap = 0;
+
+      for (const node of nodes) {
+        if (node.id === source.id || node.id === target.id) continue;
+        const d = pointToSegmentDist(node.x, node.y, a.x, a.y, b.x, b.y);
+        const overlap = (node.r + ROUTE_MARGIN) - d;
+        if (overlap > worstOverlap) {
+          worstOverlap = overlap;
+          worst = node;
+        }
+      }
+
+      if (worst) {
+        // サブセグメントの垂直方向
+        const perpX = -sdy / slen, perpY = sdx / slen;
+        // ノードがどちら側にあるか（外積）
+        const cross = sdx * (worst.y - a.y) - sdy * (worst.x - a.x);
+        const sign = cross >= 0 ? -1 : 1;
+        // ノードをセグメント上に射影
+        const t = Math.max(0.1, Math.min(0.9,
+          ((worst.x - a.x) * sdx + (worst.y - a.y) * sdy) / slenSq));
+        const projX = a.x + sdx * t;
+        const projY = a.y + sdy * t;
+        const offset = worst.r + ROUTE_MARGIN;
+        next.push({ x: projX + perpX * offset * sign, y: projY + perpY * offset * sign });
+        changed = true;
+      }
+
+      next.push(b);
+    }
+
+    pts = next;
+    if (!changed) break;
+  }
+
+  return pts.length > 2 ? pts.slice(1, -1) : [];
+}
+
+function computeAllRoutes() {
+  links.forEach(link => {
+    link.routePoints = computeLinkRoute(link);
+  });
+}
+
 function computeCurve(link) {
   const sourceId = getLinkSourceId(link);
   const targetId = getLinkTargetId(link);
@@ -777,12 +735,60 @@ function computeCurvedGeometry(link) {
 }
 
 function computePath(link) {
+  const rp = link.routePoints;
+  if (rp && rp.length > 0) return computeRoutedPath(link);
+
   const geometry = computeCurvedGeometry(link);
   if (!geometry) return '';
   return `M ${geometry.sx} ${geometry.sy} Q ${geometry.cpx} ${geometry.cpy} ${geometry.ex} ${geometry.ey}`;
 }
 
+function computeRoutedPath(link) {
+  const source = getLinkSourceNode(link);
+  const target = getLinkTargetNode(link);
+  if (!source || !target) return '';
+  const wp = link.routePoints;
+
+  // 始点: ソース円周上→最初のウェイポイント方向
+  const first = wp[0];
+  const sdx = first.x - source.x, sdy = first.y - source.y;
+  const sd = Math.hypot(sdx, sdy) || 1;
+  const sx = source.x + sdx / sd * source.r;
+  const sy = source.y + sdy / sd * source.r;
+
+  // 終点: ターゲット円周上→最後のウェイポイント方向
+  const last = wp[wp.length - 1];
+  const tdx = last.x - target.x, tdy = last.y - target.y;
+  const td = Math.hypot(tdx, tdy) || 1;
+  const ex = target.x + tdx / td * (target.r + 12);
+  const ey = target.y + tdy / td * (target.r + 12);
+
+  const all = [{ x: sx, y: sy }, ...wp, { x: ex, y: ey }];
+
+  if (all.length === 3) {
+    return `M ${sx} ${sy} Q ${wp[0].x} ${wp[0].y} ${ex} ${ey}`;
+  }
+
+  // 複数ウェイポイント: スムーズチェーン（2次ベジェ連結）
+  let d = `M ${all[0].x} ${all[0].y}`;
+  d += ` L ${(all[0].x + all[1].x) / 2} ${(all[0].y + all[1].y) / 2}`;
+  for (let i = 1; i < all.length - 1; i++) {
+    const mx = (all[i].x + all[i + 1].x) / 2;
+    const my = (all[i].y + all[i + 1].y) / 2;
+    d += ` Q ${all[i].x} ${all[i].y} ${mx} ${my}`;
+  }
+  d += ` L ${all[all.length - 1].x} ${all[all.length - 1].y}`;
+  return d;
+}
+
 function getLabelMidpoint(link) {
+  const rp = link.routePoints;
+  if (rp && rp.length > 0) {
+    // ルートの中央ウェイポイントにラベルを配置
+    const midIdx = Math.floor(rp.length / 2);
+    return { x: rp[midIdx].x, y: rp[midIdx].y - 8 };
+  }
+
   const geometry = computeCurvedGeometry(link);
   if (!geometry) return { x: 0, y: 0 };
   return {
@@ -874,6 +880,7 @@ function syncGraphElements() {
 
 function ticked() {
   geometryCache.clear();
+  computeAllRoutes();
 
   linkGroup.selectAll('path.link-path')
     .attr('d', link => computePath(link));
@@ -895,46 +902,6 @@ function getForceRadialTarget(node) {
   if (inDeg === 0) return maxRadius;
   const maxInDeg = getMaxInDegree();
   return maxRadius * (1 - inDeg / (maxInDeg + 1)) * 0.85;
-}
-
-// クラスタ引力: 同クラスタのノードを重心に向かって引き寄せる
-function forceCluster() {
-  let _strength = 0.15;
-  let _nodes = [];
-
-  function force(alpha) {
-    // 各クラスタの現在の重心を計算
-    const centroids = new Map();
-    const counts = new Map();
-    _nodes.forEach(n => {
-      const cid = clusterMap.get(n.id);
-      if (cid === undefined) return;
-      if (!centroids.has(cid)) { centroids.set(cid, { x: 0, y: 0 }); counts.set(cid, 0); }
-      centroids.get(cid).x += n.x;
-      centroids.get(cid).y += n.y;
-      counts.set(cid, counts.get(cid) + 1);
-    });
-    centroids.forEach((c, cid) => {
-      const cnt = counts.get(cid);
-      c.x /= cnt;
-      c.y /= cnt;
-    });
-
-    // 各ノードをクラスタ重心方向へ引く
-    _nodes.forEach(n => {
-      const cid = clusterMap.get(n.id);
-      if (cid === undefined) return;
-      const c = centroids.get(cid);
-      const dx = c.x - n.x;
-      const dy = c.y - n.y;
-      n.vx += dx * alpha * _strength;
-      n.vy += dy * alpha * _strength;
-    });
-  }
-
-  force.initialize = function(nodesArr) { _nodes = nodesArr; };
-  force.strength = function(s) { if (!arguments.length) return _strength; _strength = +s; return force; };
-  return force;
 }
 
 // 2線分の交差判定 (端点共有は除く)
@@ -999,8 +966,7 @@ function runForceLayout({ fit = true, seed = false } = {}) {
   getSvgSize();
 
   simulation.force('center', d3.forceCenter(width / 2, height / 2));
-  simulation.force('radial', d3.forceRadial(node => getForceRadialTarget(node), width / 2, height / 2).strength(0.05));
-  simulation.force('cluster', forceCluster().strength(0.15));
+  simulation.force('radial', d3.forceRadial(node => getForceRadialTarget(node), width / 2, height / 2).strength(0.08));
   simulation.nodes(nodes);
   simulation.force('link').links(links);
   simulation.force('collide').radius(node => node.r + COLLIDE_PADDING);
