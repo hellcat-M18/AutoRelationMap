@@ -7,8 +7,8 @@ const ICON_SIZE = 120;
 const R_BASE = 32;
 const R_MIN = 28;
 const R_MAX = 110;
-const FORCE_LINK_GAP = 220;
-const COLLIDE_PADDING = 90;
+const FORCE_LINK_GAP = 330;
+const COLLIDE_PADDING = 135;
 const BIDIR_SPLIT_OFFSET = 6;
 
 let nodes = [];
@@ -112,7 +112,7 @@ const simulation = d3.forceSimulation()
     const target = getLinkTargetNode(link);
     return (source?.r ?? R_BASE) + (target?.r ?? R_BASE) + FORCE_LINK_GAP;
   }).strength(0.25))
-  .force('charge', d3.forceManyBody().strength(-2200).distanceMax(1200))
+  .force('charge', d3.forceManyBody().strength(-3300).distanceMax(1800))
   .force('center', d3.forceCenter())
   .force('collide', d3.forceCollide().radius(node => node.r + COLLIDE_PADDING).strength(1))
   .on('tick', ticked);
@@ -511,6 +511,65 @@ function seedPivotMdsPositions() {
   });
 }
 
+// ---- 円形初期配置 (BFS 訪問順で隣接ノードを円上で近接させ交差を削減) ----
+function seedCircularLayout() {
+  getSvgSize();
+  if (nodes.length === 0) return;
+  if (nodes.length === 1) {
+    nodes[0].x = width / 2; nodes[0].y = height / 2;
+    nodes[0].vx = 0; nodes[0].vy = 0;
+    return;
+  }
+
+  // 無向隣接マップ
+  const adj = new Map();
+  nodes.forEach(n => adj.set(n.id, []));
+  links.forEach(link => {
+    const s = getLinkSourceId(link);
+    const t = getLinkTargetId(link);
+    adj.get(s)?.push(t);
+    adj.get(t)?.push(s);
+  });
+
+  // 度数最大ノードを起点にBFSで訪問順を決定
+  const startNode = nodes.reduce((best, n) =>
+    (adj.get(n.id)?.length ?? 0) > (adj.get(best.id)?.length ?? 0) ? n : best, nodes[0]);
+  const order = [];
+  const visited = new Set([startNode.id]);
+  const queue = [startNode.id];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    order.push(id);
+    // 隣接ノードを次数昇順で並べて探索することで密なクラスタを先にまとめる
+    const neighbors = [...(adj.get(id) ?? [])].sort(
+      (a, b) => (adj.get(a)?.length ?? 0) - (adj.get(b)?.length ?? 0)
+    );
+    for (const nb of neighbors) {
+      if (!visited.has(nb)) {
+        visited.add(nb);
+        queue.push(nb);
+      }
+    }
+  }
+  // 非連結ノードを末尾に追加
+  nodes.forEach(n => { if (!visited.has(n.id)) order.push(n.id); });
+
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(width, height) * 0.55;
+  const n = nodes.length;
+  const orderMap = new Map(order.map((id, i) => [id, i]));
+
+  nodes.forEach(node => {
+    const i = orderMap.get(node.id) ?? 0;
+    const angle = (2 * Math.PI * i / n) - Math.PI / 2;
+    node.x = cx + radius * Math.cos(angle) + (Math.random() - 0.5) * 12;
+    node.y = cy + radius * Math.sin(angle) + (Math.random() - 0.5) * 12;
+    node.vx = 0;
+    node.vy = 0;
+  });
+}
+
 function stopActiveLayouts() {
   simulation.stop();
 }
@@ -732,6 +791,8 @@ function syncGraphElements() {
     .attr('data-id', node => node.id)
     .on('click', onNodeClick)
     .on('contextmenu', onNodeRightClick)
+    .on('pointerdown', onNodePointerDown)
+    .on('pointerup pointercancel', onNodePointerUp)
     .on('mouseover', (event, node) => showTooltip(event, node.name))
     .on('mouseout', hideTooltip);
 
@@ -795,7 +856,7 @@ function ticked() {
 
 function getForceRadialTarget(node) {
   const inDeg = getInDegree(node.id);
-  const maxRadius = Math.min(width, height) * 0.38;
+  const maxRadius = Math.min(width, height) * 0.55;
   if (nodes.length <= 1) return 0;
   if (inDeg === 0) return maxRadius;
   const maxInDeg = getMaxInDegree();
@@ -834,9 +895,73 @@ function countCrossings(positions) {
   return count;
 }
 
+// 交差削減: ノードペアをスワップして交差数を hill-climbing で最小化
+// ノードオブジェクトの x/y を直接書き換え、改善しなければ戻す
+function crossingReduceSwaps() {
+  const evalLinks = links.filter(l => !biDirSecondarySet.has(l.id));
+  if (evalLinks.length < 2 || nodes.length < 4) return;
+  // 大規模グラフは計算コストが高いためスキップ
+  if (nodes.length > 80 || evalLinks.length > 120) return;
+
+  // nodeMap はノードオブジェクトへの参照: x/y 変更が即座に反映される
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+  function localCrossings() {
+    let count = 0;
+    for (let i = 0; i < evalLinks.length; i++) {
+      const si = getLinkSourceId(evalLinks[i]);
+      const ti = getLinkTargetId(evalLinks[i]);
+      const na = nodeMap.get(si);
+      const nb = nodeMap.get(ti);
+      if (!na || !nb) continue;
+      const ax = na.x, ay = na.y, bx = nb.x, by = nb.y;
+      for (let j = i + 1; j < evalLinks.length; j++) {
+        const sj = getLinkSourceId(evalLinks[j]);
+        const tj = getLinkTargetId(evalLinks[j]);
+        if (sj === si || sj === ti || tj === si || tj === ti) continue;
+        const nc = nodeMap.get(sj);
+        const nd = nodeMap.get(tj);
+        if (!nc || !nd) continue;
+        if (segmentsIntersect(ax, ay, bx, by, nc.x, nc.y, nd.x, nd.y)) count++;
+      }
+    }
+    return count;
+  }
+
+  const MAX_ROUNDS = 3;
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    let improved = false;
+    for (let i = 0; i < nodes.length - 1; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const ni = nodes[i], nj = nodes[j];
+        const before = localCrossings();
+
+        // スワップ
+        let tmp = ni.x; ni.x = nj.x; nj.x = tmp;
+        tmp = ni.y; ni.y = nj.y; nj.y = tmp;
+
+        const after = localCrossings();
+        if (after < before) {
+          improved = true; // スワップを保持
+        } else {
+          // 元に戻す
+          tmp = ni.x; ni.x = nj.x; nj.x = tmp;
+          tmp = ni.y; ni.y = nj.y; nj.y = tmp;
+        }
+      }
+    }
+    if (!improved) break; // 改善なし → 収束
+  }
+}
+
 // 1回分のシミュレーションを走らせ、結果の座標マップを返す
-function runOneTrial() {
-  seedPivotMdsPositions();
+function runOneTrial(trialIndex = 0) {
+  // 偶数試行: ピボットMDS、奇数試行: BFS円形 (探索空間の多様化)
+  if (trialIndex % 2 === 1) {
+    seedCircularLayout();
+  } else {
+    seedPivotMdsPositions();
+  }
   simulation.nodes(nodes);
   simulation.force('link').links(links);
   simulation.force('collide').radius(node => node.r + COLLIDE_PADDING);
@@ -858,7 +983,7 @@ function applyPositions(positions) {
   });
 }
 
-const LAYOUT_TRIALS = 3;
+const LAYOUT_TRIALS = 5;
 
 function runForceLayout({ fit = true, seed = false } = {}) {
   beginLayout();
@@ -886,12 +1011,14 @@ function runForceLayout({ fit = true, seed = false } = {}) {
     let bestPos = null;
     let bestCross = Infinity;
     for (let trial = 0; trial < LAYOUT_TRIALS; trial++) {
-      const pos = runOneTrial();
+      const pos = runOneTrial(trial);
       const cross = countCrossings(pos);
       if (cross < bestCross) { bestCross = cross; bestPos = pos; }
       if (cross === 0) break; // 完全に交差なし → 即採用
     }
     applyPositions(bestPos);
+    // ノードペアスワップによる局所的な交差削減 (hill-climbing)
+    crossingReduceSwaps();
   }
 
   ticked();
@@ -935,15 +1062,15 @@ function onArrowDragStart(event, node) {
 }
 
 function onArrowDragMove(event) {
-  const [mouseX, mouseY] = d3.pointer(event.sourceEvent, mainGroup.node());
-  dragLine.attr('x2', mouseX).attr('y2', mouseY);
+  // event.x/y はD3がタッチ・マウス問わず正しく計算した mainGroup 座標
+  dragLine.attr('x2', event.x).attr('y2', event.y);
 }
 
 function onArrowDragEnd(event) {
   dragLine.attr('visibility', 'hidden');
   if (!arrowSrc) return;
 
-  const [mouseX, mouseY] = d3.pointer(event.sourceEvent, mainGroup.node());
+  const mouseX = event.x, mouseY = event.y;
   const target = nodes.find(node => {
     if (node.id === arrowSrc.id) return false;
     const dx = (node.x ?? 0) - mouseX;
@@ -966,6 +1093,28 @@ function onNodeClick(event, node) {
   hideContextMenu();
   selectedNodeId = selectedNodeId === node.id ? null : node.id;
   applySelectionState();
+}
+
+// ---- 長押しによるコンテキストメニュー (タッチ端末対応) ----
+let _longPressTimer = null;
+const LONG_PRESS_MS = 500;
+
+function onNodePointerDown(event, node) {
+  // タッチのみ長押し検出。マウスは contextmenu イベントに任せる
+  if (event.pointerType !== 'touch') return;
+  // テキスト選択UIが出る前に抑止
+  event.preventDefault();
+  _longPressTimer = setTimeout(() => {
+    _longPressTimer = null;
+    showContextMenu(event.clientX, event.clientY, node);
+  }, LONG_PRESS_MS);
+}
+
+function onNodePointerUp() {
+  if (_longPressTimer !== null) {
+    clearTimeout(_longPressTimer);
+    _longPressTimer = null;
+  }
 }
 
 function onNodeRightClick(event, node) {

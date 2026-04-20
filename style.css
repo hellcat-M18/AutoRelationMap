@@ -288,6 +288,11 @@ button:hover { background: #d0dcea; }
 .node-group {
   cursor: default;
   opacity: var(--lod, 1);
+  touch-action: none;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .node-ring {
