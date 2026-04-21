@@ -368,9 +368,72 @@ function closeDetailPanel() {
   }
 }
 
+// ---- ノード編集共通ロジック（詳細パネルボタン・右クリックメニュー共用） ----
+function openEditNameDialog(node) {
+  const titleEl = document.getElementById('modal-title');
+  const descEl  = document.getElementById('modal-desc');
+  const inputEl = document.getElementById('modal-input');
+  titleEl.textContent = '名前を変更';
+  descEl.textContent  = '';
+  inputEl.value       = node.name;
+  inputEl.placeholder = '名前を入力';
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  inputEl.focus();
+  inputEl.select();
+  modalCallback = newName => {
+    if (newName.trim()) {
+      node.name = newName.trim();
+      broadcastOp('node_rename', { id: node.id, name: node.name });
+      scheduleSave();
+      restart({ layout: false, fit: false });
+    }
+    titleEl.textContent = '関係を入力';
+    inputEl.placeholder = '例：友人、同僚、ライバル';
+  };
+}
+
+function openEditIconDialog(node) {
+  document.getElementById('modal-icon-desc').textContent = node.name;
+  document.getElementById('modal-icon-overlay').classList.remove('hidden');
+  const fileInput = document.getElementById('input-icon-change');
+  fileInput.value = '';
+  const newInput = fileInput.cloneNode(true);
+  fileInput.parentNode.replaceChild(newInput, fileInput);
+  newInput.addEventListener('change', () => {
+    const file = newInput.files[0];
+    document.getElementById('modal-icon-overlay').classList.add('hidden');
+    if (!file) return;
+    resizeImage(file, async dataUrl => {
+      const displayUrl = await uploadIconToStorage(dataUrl);
+      node.dataUrl = displayUrl;
+      broadcastOp('node_icon', { id: node.id, dataUrl: displayUrl });
+      scheduleSave();
+      restart({ layout: false, fit: false });
+    });
+  }, { once: true });
+}
+
+function deleteNode(node) {
+  const targetId = node.id;
+  nodes = nodes.filter(n => n.id !== targetId);
+  links = links.filter(link => getLinkSourceId(link) !== targetId && getLinkTargetId(link) !== targetId);
+  if (selectedNodeId === targetId) selectedNodeId = null;
+  broadcastOp('node_delete', { id: targetId });
+  scheduleSave();
+  restart({ layout: true, fit: true, seed: true });
+}
+
 function renderDetailPanel(node) {
   document.getElementById('detail-icon').src = node.dataUrl || '';
   document.getElementById('detail-name').textContent = node.name;
+
+  // 詳細パネルのノード編集ボタン（タップで操作できるよう長押し不要にする）
+  document.getElementById('detail-btn-edit-name').onclick = () => openEditNameDialog(node);
+  document.getElementById('detail-btn-edit-icon').onclick = () => openEditIconDialog(node);
+  document.getElementById('detail-btn-delete').onclick = () => {
+    closeDetailPanel();
+    deleteNode(node);
+  };
 
   // 入力（このノードへ向かう矢印）
   const inList = document.getElementById('detail-in-list');
@@ -802,10 +865,6 @@ function syncGraphElements() {
     .attr('data-id', node => node.id)
     .on('click', onNodeClick)
     .on('contextmenu', onNodeRightClick)
-    .on('touchstart', onNodeTouchStart, { passive: false })
-    .on('touchmove', onNodeTouchMove, { passive: false })
-    .on('touchend', onNodeTouchEnd, { passive: false })
-    .on('touchcancel', onNodeTouchCancel, { passive: false })
     .on('mouseover', (event, node) => showTooltip(event, node.name))
     .on('mouseout', hideTooltip);
 
@@ -1070,9 +1129,6 @@ function restart({ layout = true, fit = layout, seed = false } = {}) {
 }
 
 function onArrowDragStart(event, node) {
-  // ドラッグ開始時に長押しタイマーをキャンセル（コンテキストメニューを抑止）
-  clearLongPressTimer();
-  _touchGestureState = null;
   arrowSrc = node;
   dragLine
     .attr('x1', node.x)
@@ -1117,80 +1173,7 @@ function onNodeClick(event, node) {
   applySelectionState();
 }
 
-// ---- 長押しによるコンテキストメニュー (タッチ端末対応) ----
-let _longPressTimer = null;
-let _touchGestureState = null;
-const LONG_PRESS_MS = 650;
-const LONG_PRESS_MOVE_TOLERANCE = 12;
-
-function clearLongPressTimer() {
-  if (_longPressTimer !== null) {
-    clearTimeout(_longPressTimer);
-    _longPressTimer = null;
-  }
-}
-
-function getPrimaryTouch(event) {
-  return event.changedTouches?.[0] ?? event.touches?.[0] ?? null;
-}
-
-function beginLongPress(clientX, clientY, node) {
-  clearLongPressTimer();
-  _longPressTimer = setTimeout(() => {
-    _longPressTimer = null;
-    if (_touchGestureState) _touchGestureState.opened = true;
-    showContextMenu(clientX, clientY, node);
-  }, LONG_PRESS_MS);
-}
-
-function onNodeTouchStart(event, node) {
-  const touch = getPrimaryTouch(event);
-  if (!touch) return;
-
-  _touchGestureState = {
-    nodeId: node.id,
-    startX: touch.clientX,
-    startY: touch.clientY,
-    opened: false,
-    moved: false,
-  };
-
-  // iOS Safari の青い選択ハイライトを出さないため、touchstart を明示的に抑止
-  event.preventDefault();
-  beginLongPress(touch.clientX, touch.clientY, node);
-}
-
-function onNodeTouchMove(event) {
-  const touch = getPrimaryTouch(event);
-  if (!touch || !_touchGestureState) return;
-
-  const dx = touch.clientX - _touchGestureState.startX;
-  const dy = touch.clientY - _touchGestureState.startY;
-  if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE) {
-    _touchGestureState.moved = true;
-    clearLongPressTimer();
-  }
-
-  event.preventDefault();
-}
-
-function onNodeTouchEnd(event, node) {
-  const touchState = _touchGestureState;
-  clearLongPressTimer();
-  _touchGestureState = null;
-
-  if (!touchState) return;
-
-  event.preventDefault();
-  if (touchState.opened || touchState.moved || arrowSrc) return;
-  onNodeClick(event, node);
-}
-
-function onNodeTouchCancel(event) {
-  clearLongPressTimer();
-  _touchGestureState = null;
-  event.preventDefault();
-}
+// ---- 長押しは廃止。ノード編集は詳細パネルのボタンで行う ----
 
 function onNodeRightClick(event, node) {
   event.preventDefault();
@@ -1323,62 +1306,17 @@ document.getElementById('modal-input').addEventListener('keydown', event => {
 });
 
 document.getElementById('ctx-edit-name').addEventListener('click', () => {
-  const target = ctxTarget;
-  if (!target) return;
+  if (!ctxTarget) return;
+  const node = ctxTarget;
   hideContextMenu();
-
-  const titleEl = document.getElementById('modal-title');
-  const descEl  = document.getElementById('modal-desc');
-  const inputEl = document.getElementById('modal-input');
-  titleEl.textContent = '名前を変更';
-  descEl.textContent  = '';
-  inputEl.value       = target.name;
-  inputEl.placeholder = '名前を入力';
-
-  document.getElementById('modal-overlay').classList.remove('hidden');
-  inputEl.focus();
-  inputEl.select();
-
-  modalCallback = newName => {
-    if (newName.trim()) {
-      target.name = newName.trim();
-      broadcastOp('node_rename', { id: target.id, name: target.name });
-      scheduleSave();
-      restart({ layout: false, fit: false });
-    }
-    // モーダルタイトルを元に戻す
-    titleEl.textContent = '関係を入力';
-    inputEl.placeholder = '例：友人、同僚、ライバル';
-  };
+  openEditNameDialog(node);
 });
 
 document.getElementById('ctx-edit-icon').addEventListener('click', () => {
-  const target = ctxTarget;
-  if (!target) return;
+  if (!ctxTarget) return;
+  const node = ctxTarget;
   hideContextMenu();
-
-  document.getElementById('modal-icon-desc').textContent = target.name;
-  document.getElementById('modal-icon-overlay').classList.remove('hidden');
-
-  // 前回のリスナーを確実に除去してから登録
-  const fileInput = document.getElementById('input-icon-change');
-  fileInput.value = '';
-  const newInput = fileInput.cloneNode(true);
-  fileInput.parentNode.replaceChild(newInput, fileInput);
-
-  const onchange = () => {
-    const file = newInput.files[0];
-    document.getElementById('modal-icon-overlay').classList.add('hidden');
-    if (!file) return;
-    resizeImage(file, async dataUrl => {
-      const displayUrl = await uploadIconToStorage(dataUrl);
-      target.dataUrl = displayUrl;
-      broadcastOp('node_icon', { id: target.id, dataUrl: displayUrl });
-      scheduleSave();
-      restart({ layout: false, fit: false });
-    });
-  };
-  newInput.addEventListener('change', onchange, { once: true });
+  openEditIconDialog(node);
 });
 
 document.getElementById('modal-icon-cancel').addEventListener('click', () => {
@@ -1407,14 +1345,9 @@ document.getElementById('mobile-overlay').addEventListener('click', () => {
 
 document.getElementById('ctx-delete').addEventListener('click', () => {
   if (!ctxTarget) return;
-  const targetId = ctxTarget.id;
-  nodes = nodes.filter(node => node.id !== targetId);
-  links = links.filter(link => getLinkSourceId(link) !== targetId && getLinkTargetId(link) !== targetId);
-  if (selectedNodeId === targetId) selectedNodeId = null;
+  const node = ctxTarget;
   hideContextMenu();
-  broadcastOp('node_delete', { id: targetId });
-  scheduleSave();
-  restart({ layout: true, fit: true, seed: true });
+  deleteNode(node);
 });
 
 document.getElementById('input-icon').addEventListener('change', function () {

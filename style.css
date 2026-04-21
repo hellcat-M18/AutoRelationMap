@@ -604,6 +604,45 @@ button:hover { background: #d0dcea; }
 }
 #detail-close:hover { background: #f0f4f8; color: #1a1a2e; }
 
+#detail-actions {
+  width: 280px;
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid #dde3ec;
+  flex-shrink: 0;
+}
+
+#detail-btn-edit-name,
+#detail-btn-edit-icon {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  border: 1px solid #b8cfe8;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #edf3fa;
+  color: #1a6fa5;
+}
+#detail-btn-edit-name:hover,
+#detail-btn-edit-icon:hover { background: #d0dcea; }
+
+#detail-btn-delete {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  border: 1px solid #f5b8be;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #fff0f0;
+  color: #c0392b;
+}
+#detail-btn-delete:hover { background: #fdd0d6; }
+
 #detail-body {
   width: 280px;
   flex: 1;
@@ -796,6 +835,7 @@ button:hover { background: #d0dcea; }
 
   /* ボトムシート内のヘッダー・ボディの固定幅を解除 */
   #detail-header,
+  #detail-actions,
   #detail-body {
     width: 100%;
   }
