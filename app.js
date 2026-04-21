@@ -42,7 +42,9 @@ const svg = d3.select(`#${SVG_ID}`);
 const zoomBehavior = d3.zoom()
   .scaleExtent([0.1, 5])
   .on('zoom', event => {
-    mainGroup.attr('transform', event.transform);
+    const { x, y, k } = event.transform;
+    // CSS transform を使うことでブラウザがコンポジット層として GPU に乗せる
+    mainGroup.style('transform', `translate(${x}px,${y}px) scale(${k})`);
   });
 
 svg.call(zoomBehavior)
