@@ -2161,6 +2161,10 @@ document.getElementById('btn-copy-share')?.addEventListener('click', copyShareLi
 
 // ---- 初期化 ----
 getSvgSize();
+// #map-container のサイズ変化（詳細パネル開閉など）に追従してPixiキャンバスをリサイズ
+if (typeof ResizeObserver !== 'undefined') {
+  new ResizeObserver(() => { getSvgSize(); }).observe(document.getElementById(MAP_CONTAINER_ID));
+}
 restart({ layout: false, fit: false });
 
 if (sb) {
