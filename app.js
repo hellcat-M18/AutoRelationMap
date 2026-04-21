@@ -802,8 +802,10 @@ function syncGraphElements() {
     .attr('data-id', node => node.id)
     .on('click', onNodeClick)
     .on('contextmenu', onNodeRightClick)
-    .on('pointerdown', onNodePointerDown)
-    .on('pointerup pointercancel', onNodePointerUp)
+    .on('touchstart', onNodeTouchStart, { passive: false })
+    .on('touchmove', onNodeTouchMove, { passive: false })
+    .on('touchend', onNodeTouchEnd, { passive: false })
+    .on('touchcancel', onNodeTouchCancel, { passive: false })
     .on('mouseover', (event, node) => showTooltip(event, node.name))
     .on('mouseout', hideTooltip);
 
@@ -1069,10 +1071,8 @@ function restart({ layout = true, fit = layout, seed = false } = {}) {
 
 function onArrowDragStart(event, node) {
   // ドラッグ開始時に長押しタイマーをキャンセル（コンテキストメニューを抑止）
-  if (_longPressTimer !== null) {
-    clearTimeout(_longPressTimer);
-    _longPressTimer = null;
-  }
+  clearLongPressTimer();
+  _touchGestureState = null;
   arrowSrc = node;
   dragLine
     .attr('x1', node.x)
@@ -1119,24 +1119,77 @@ function onNodeClick(event, node) {
 
 // ---- 長押しによるコンテキストメニュー (タッチ端末対応) ----
 let _longPressTimer = null;
+let _touchGestureState = null;
 const LONG_PRESS_MS = 650;
+const LONG_PRESS_MOVE_TOLERANCE = 12;
 
-function onNodePointerDown(event, node) {
-  // タッチのみ長押し検出。マウスは contextmenu イベントに任せる
-  if (event.pointerType !== 'touch') return;
-  // テキスト選択UIが出る前に抑止
-  event.preventDefault();
-  _longPressTimer = setTimeout(() => {
-    _longPressTimer = null;
-    showContextMenu(event.clientX, event.clientY, node);
-  }, LONG_PRESS_MS);
-}
-
-function onNodePointerUp() {
+function clearLongPressTimer() {
   if (_longPressTimer !== null) {
     clearTimeout(_longPressTimer);
     _longPressTimer = null;
   }
+}
+
+function getPrimaryTouch(event) {
+  return event.changedTouches?.[0] ?? event.touches?.[0] ?? null;
+}
+
+function beginLongPress(clientX, clientY, node) {
+  clearLongPressTimer();
+  _longPressTimer = setTimeout(() => {
+    _longPressTimer = null;
+    if (_touchGestureState) _touchGestureState.opened = true;
+    showContextMenu(clientX, clientY, node);
+  }, LONG_PRESS_MS);
+}
+
+function onNodeTouchStart(event, node) {
+  const touch = getPrimaryTouch(event);
+  if (!touch) return;
+
+  _touchGestureState = {
+    nodeId: node.id,
+    startX: touch.clientX,
+    startY: touch.clientY,
+    opened: false,
+    moved: false,
+  };
+
+  // iOS Safari の青い選択ハイライトを出さないため、touchstart を明示的に抑止
+  event.preventDefault();
+  beginLongPress(touch.clientX, touch.clientY, node);
+}
+
+function onNodeTouchMove(event) {
+  const touch = getPrimaryTouch(event);
+  if (!touch || !_touchGestureState) return;
+
+  const dx = touch.clientX - _touchGestureState.startX;
+  const dy = touch.clientY - _touchGestureState.startY;
+  if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE) {
+    _touchGestureState.moved = true;
+    clearLongPressTimer();
+  }
+
+  event.preventDefault();
+}
+
+function onNodeTouchEnd(event, node) {
+  const touchState = _touchGestureState;
+  clearLongPressTimer();
+  _touchGestureState = null;
+
+  if (!touchState) return;
+
+  event.preventDefault();
+  if (touchState.opened || touchState.moved || arrowSrc) return;
+  onNodeClick(event, node);
+}
+
+function onNodeTouchCancel(event) {
+  clearLongPressTimer();
+  _touchGestureState = null;
+  event.preventDefault();
 }
 
 function onNodeRightClick(event, node) {

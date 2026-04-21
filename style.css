@@ -182,6 +182,15 @@ button:hover { background: #d0dcea; }
 #map-svg {
   width: 100%;
   height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#map-svg * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* リンク（矢印線） */
@@ -315,6 +324,7 @@ button:hover { background: #d0dcea; }
 .node-group .node-ring,
 .node-group .node-label {
   opacity: calc(var(--node-base-lod, 1) * var(--node-selection-lod, 1));
+  -webkit-user-drag: none;
 }
 
 .node-ring {
