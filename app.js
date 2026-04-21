@@ -464,7 +464,15 @@ function applySelectionState() {
 
   if (selectedNodeId !== null) {
     const node = nodeById(selectedNodeId);
-    if (node) updateDetailFab(node);
+    if (node) {
+      const detailOpen = document.getElementById('detail-panel').classList.contains('open');
+      if (detailOpen) {
+        // 詳細パネルが開いていれば中身を即時更新
+        openDetailPanel(node);
+      } else {
+        updateDetailFab(node);
+      }
+    }
   } else {
     closeDetailPanel();
     hideDetailFab();
