@@ -59,6 +59,30 @@
     return Math.hypot(px - closestX, py - closestY);
   }
 
+  function pointOnQuadraticBezier(sx, sy, cpx, cpy, ex, ey, t) {
+    const u = 1 - t;
+    return {
+      x: u * u * sx + 2 * u * t * cpx + t * t * ex,
+      y: u * u * sy + 2 * u * t * cpy + t * t * ey,
+    };
+  }
+
+  function distancePointToQuadratic(px, py, sx, sy, cpx, cpy, ex, ey, segments = 20) {
+    let minDistance = Infinity;
+    let previousPoint = { x: sx, y: sy };
+
+    for (let index = 1; index <= segments; index += 1) {
+      const currentPoint = pointOnQuadraticBezier(sx, sy, cpx, cpy, ex, ey, index / segments);
+      minDistance = Math.min(
+        minDistance,
+        distancePointToSegment(px, py, previousPoint.x, previousPoint.y, currentPoint.x, currentPoint.y)
+      );
+      previousPoint = currentPoint;
+    }
+
+    return minDistance;
+  }
+
   function drawArrowHead(graphics, fromX, fromY, toX, toY, width, color, alpha) {
     const dx = toX - fromX;
     const dy = toY - fromY;
@@ -412,8 +436,21 @@
           join: PIXI.LINE_JOIN.ROUND,
         });
         view.graphics.moveTo(geometry.sx, geometry.sy);
-        view.graphics.lineTo(geometry.ex, geometry.ey);
-        drawArrowHead(view.graphics, geometry.sx, geometry.sy, geometry.ex, geometry.ey, width, color, alpha);
+        if (geometry.curved) {
+          view.graphics.quadraticCurveTo(geometry.cpx, geometry.cpy, geometry.ex, geometry.ey);
+        } else {
+          view.graphics.lineTo(geometry.ex, geometry.ey);
+        }
+        drawArrowHead(
+          view.graphics,
+          geometry.arrowFromX,
+          geometry.arrowFromY,
+          geometry.ex,
+          geometry.ey,
+          width,
+          color,
+          alpha
+        );
         if (primaryBidir && !split) {
           drawArrowHead(view.graphics, geometry.ex, geometry.ey, geometry.sx, geometry.sy, width, color, alpha);
         }
@@ -589,14 +626,25 @@
         const link = links[index];
         const view = this.linkViews.get(link.id);
         if (!view?.visibleForHit || !view.lastGeometry) continue;
-        const distance = distancePointToSegment(
-          pointerData.worldX,
-          pointerData.worldY,
-          view.lastGeometry.sx,
-          view.lastGeometry.sy,
-          view.lastGeometry.ex,
-          view.lastGeometry.ey
-        );
+        const distance = view.lastGeometry.curved
+          ? distancePointToQuadratic(
+              pointerData.worldX,
+              pointerData.worldY,
+              view.lastGeometry.sx,
+              view.lastGeometry.sy,
+              view.lastGeometry.cpx,
+              view.lastGeometry.cpy,
+              view.lastGeometry.ex,
+              view.lastGeometry.ey
+            )
+          : distancePointToSegment(
+              pointerData.worldX,
+              pointerData.worldY,
+              view.lastGeometry.sx,
+              view.lastGeometry.sy,
+              view.lastGeometry.ex,
+              view.lastGeometry.ey
+            );
         if (distance <= threshold) return link;
       }
       return null;

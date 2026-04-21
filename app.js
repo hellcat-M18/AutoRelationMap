@@ -10,7 +10,10 @@ const R_MIN = 28;
 const R_MAX = 110;
 const FORCE_LINK_GAP = 330;
 const COLLIDE_PADDING = 135;
-const BIDIR_SPLIT_OFFSET = 6;
+const BIDIR_CURVE_OFFSET_MIN = 48;
+const BIDIR_CURVE_OFFSET_MAX = 150;
+const BIDIR_CURVE_OFFSET_FACTOR = 0.24;
+const BIDIR_CURVE_LABEL_OFFSET = 10;
 const MAX_OUTGOING_LINKS = 25;
 const MIN_VIEW_SCALE = 0.1;
 const MAX_VIEW_SCALE = 5;
@@ -949,6 +952,23 @@ function isBidirSplit(link) {
   return s === selectedNodeId || t === selectedNodeId;
 }
 
+function pointOnQuadraticBezier(sx, sy, cpx, cpy, ex, ey, t) {
+  const u = 1 - t;
+  return {
+    x: u * u * sx + 2 * u * t * cpx + t * t * ex,
+    y: u * u * sy + 2 * u * t * cpy + t * t * ey,
+  };
+}
+
+function normalizeVector(dx, dy, fallbackX = 1, fallbackY = 0) {
+  const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+  return {
+    x: dx / distance,
+    y: dy / distance,
+    distance,
+  };
+}
+
 function computeLinkGeometry(link) {
   const cached = geometryCache.get(link.id);
   if (cached !== undefined) return cached;
@@ -966,18 +986,63 @@ function computeLinkGeometry(link) {
   const split = isBidirSplit(link);
   // 非スプリットの双方向プライマリは始端にも矢印スペースを確保
   const startGap = (biDirPrimarySet.has(link.id) && !split) ? source.r + 12 : source.r;
-  // スプリット時は垂直方向に対称オフセット
+  const endGap = target.r + 12;
   const side = biDirSecondarySet.has(link.id) ? -1 : 1;
-  const offX = split ? nx * BIDIR_SPLIT_OFFSET * side : 0;
-  const offY = split ? ny * BIDIR_SPLIT_OFFSET * side : 0;
-  const sx = source.x + ux * startGap + offX;
-  const sy = source.y + uy * startGap + offY;
-  const ex = target.x - ux * (target.r + 12) + offX;
-  const ey = target.y - uy * (target.r + 12) + offY;
-  const cpx = (sx + ex) / 2;
-  const cpy = (sy + ey) / 2;
 
-  const result = { sx, sy, cpx, cpy, ex, ey };
+  let result;
+  if (split) {
+    const curveOffset = Math.min(
+      BIDIR_CURVE_OFFSET_MAX,
+      Math.max(BIDIR_CURVE_OFFSET_MIN, distance * BIDIR_CURVE_OFFSET_FACTOR)
+    ) * side;
+    const cpx = (source.x + target.x) / 2 + nx * curveOffset;
+    const cpy = (source.y + target.y) / 2 + ny * curveOffset;
+
+    const startTangent = normalizeVector(cpx - source.x, cpy - source.y, ux, uy);
+    const endTangent = normalizeVector(target.x - cpx, target.y - cpy, ux, uy);
+
+    const sx = source.x + startTangent.x * startGap;
+    const sy = source.y + startTangent.y * startGap;
+    const ex = target.x - endTangent.x * endGap;
+    const ey = target.y - endTangent.y * endGap;
+
+    const labelPoint = pointOnQuadraticBezier(sx, sy, cpx, cpy, ex, ey, 0.5);
+    result = {
+      sx,
+      sy,
+      cpx,
+      cpy,
+      ex,
+      ey,
+      curved: true,
+      labelX: labelPoint.x + nx * BIDIR_CURVE_LABEL_OFFSET * side,
+      labelY: labelPoint.y + ny * BIDIR_CURVE_LABEL_OFFSET * side,
+      arrowFromX: cpx,
+      arrowFromY: cpy,
+    };
+  } else {
+    const sx = source.x + ux * startGap;
+    const sy = source.y + uy * startGap;
+    const ex = target.x - ux * endGap;
+    const ey = target.y - uy * endGap;
+    const cpx = (sx + ex) / 2;
+    const cpy = (sy + ey) / 2;
+
+    result = {
+      sx,
+      sy,
+      cpx,
+      cpy,
+      ex,
+      ey,
+      curved: false,
+      labelX: cpx,
+      labelY: cpy - 8,
+      arrowFromX: sx,
+      arrowFromY: sy,
+    };
+  }
+
   geometryCache.set(link.id, result);
   return result;
 }
@@ -985,13 +1050,16 @@ function computeLinkGeometry(link) {
 function computePath(link) {
   const geometry = computeLinkGeometry(link);
   if (!geometry) return '';
+  if (geometry.curved) {
+    return `M ${geometry.sx} ${geometry.sy} Q ${geometry.cpx} ${geometry.cpy} ${geometry.ex} ${geometry.ey}`;
+  }
   return `M ${geometry.sx} ${geometry.sy} L ${geometry.ex} ${geometry.ey}`;
 }
 
 function getLabelMidpoint(link) {
   const geometry = computeLinkGeometry(link);
   if (!geometry) return { x: 0, y: 0 };
-  return { x: geometry.cpx, y: geometry.cpy - 8 };
+  return { x: geometry.labelX, y: geometry.labelY };
 }
 
 function syncGraphElements() {
