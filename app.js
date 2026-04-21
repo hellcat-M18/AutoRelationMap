@@ -44,9 +44,7 @@ let viewAnimationFrame = null;
 
 // ---- パフォーマンス用キャッシュ ----
 let inDegreeCache = new Map();
-let totalDegreeCache = new Map();
 let maxInDegreeCache = 1;
-let maxDegreeCache = 1;
 let geometryCache = new Map();
 
 const svg = d3.select(`#${SVG_ID}`);
@@ -167,24 +165,14 @@ function getLinkTargetNode(link) {
 
 function rebuildDegreeCache() {
   inDegreeCache = new Map();
-  totalDegreeCache = new Map();
   nodes.forEach(node => {
     inDegreeCache.set(node.id, 0);
-    totalDegreeCache.set(node.id, 0);
   });
   links.forEach(link => {
-    const src = getLinkSourceId(link);
     const tgt = getLinkTargetId(link);
     inDegreeCache.set(tgt, (inDegreeCache.get(tgt) ?? 0) + 1);
-    totalDegreeCache.set(src, (totalDegreeCache.get(src) ?? 0) + 1);
-    totalDegreeCache.set(tgt, (totalDegreeCache.get(tgt) ?? 0) + 1);
   });
   maxInDegreeCache = nodes.length ? Math.max(1, ...inDegreeCache.values()) : 1;
-  maxDegreeCache   = nodes.length ? Math.max(1, ...totalDegreeCache.values()) : 1;
-}
-
-function getNodeDegree(nodeId) {
-  return totalDegreeCache.get(nodeId) ?? 0;
 }
 
 function getInDegree(nodeId) {
@@ -193,10 +181,6 @@ function getInDegree(nodeId) {
 
 function getMaxInDegree() {
   return maxInDegreeCache;
-}
-
-function getMaxDegree() {
-  return maxDegreeCache;
 }
 
 function calcRadius(nodeId) {
@@ -986,7 +970,7 @@ function pointOnQuadraticBezier(sx, sy, cpx, cpy, ex, ey, t) {
   };
 }
 
-function normalizeVector(dx, dy, fallbackX = 1, fallbackY = 0) {
+function normalizeVector(dx, dy) {
   const distance = Math.sqrt(dx * dx + dy * dy) || 1;
   return {
     x: dx / distance,
@@ -1141,9 +1125,7 @@ function syncGraphElements() {
     .on('mouseover', onNodePointerEnter)
     .on('mouseout', onNodePointerLeave);
 
-  if (usePixiRenderer) {
-    nodeEnter.append('circle').attr('class', 'node-hit-area');
-  } else {
+  if (!usePixiRenderer) {
     nodeEnter.append('clipPath')
       .attr('id', node => `clip-${node.id}`)
       .append('circle');
@@ -1163,12 +1145,7 @@ function syncGraphElements() {
 
   const nodeMerge = nodeEnter.merge(nodeSelection);
 
-  if (usePixiRenderer) {
-    nodeMerge.select('.node-hit-area')
-      .attr('r', node => node.r + 10)
-      .attr('cx', 0)
-      .attr('cy', 0);
-  } else {
+  if (!usePixiRenderer) {
     nodeMerge.select('clipPath circle')
       .attr('r', node => node.r)
       .attr('cx', 0)

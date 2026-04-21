@@ -24,9 +24,12 @@
     return (red << 16) + (green << 8) + blue;
   }
 
+  let _themeColorsCache = null;
+
   function getThemeColors() {
+    if (_themeColorsCache) return _themeColorsCache;
     const root = getComputedStyle(document.documentElement);
-    return {
+    _themeColorsCache = {
       mapBg: parseCssColor(root.getPropertyValue('--map-bg'), 0xf0f4f8),
       graphAccent: parseCssColor(root.getPropertyValue('--graph-accent'), 0x1a6fa5),
       graphHover: parseCssColor(root.getPropertyValue('--graph-hover'), 0xe03060),
@@ -39,7 +42,13 @@
       nodeSearch: 0xe0820c,
       white: 0xffffff,
     };
+    return _themeColorsCache;
   }
+
+  // テーマ変更時（ダークモード切替など）にキャッシュを破棄
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    _themeColorsCache = null;
+  });
 
   function cloneTextStyle(style) {
     return typeof style.clone === 'function' ? style.clone() : new PIXI.TextStyle(style);
@@ -1006,10 +1015,6 @@
           this.invokeInteractionHandler('onArrowDragEnd', session.node, nativeEvent, pointerData);
         } else if (hit?.type === 'node' && hit.node.id === session.node?.id) {
           this.invokeInteractionHandler('onNodeClick', session.node, nativeEvent, pointerData);
-        }
-      } else if (session.type === 'link') {
-        if (!session.moved && hit?.type === 'link' && hit.link.id === session.link?.id) {
-          this.invokeInteractionHandler('onLinkClick', session.link, nativeEvent, pointerData);
         }
       } else if (!session.panning) {
         this.interactionHandlers.onBackgroundClick?.();
