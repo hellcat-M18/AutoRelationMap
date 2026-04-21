@@ -2,6 +2,7 @@
   const MIN_SCALE = 0.1;
   const MAX_SCALE = 5;
   const POINTER_DRAG_THRESHOLD = 6;
+  const TOUCH_DRAG_THRESHOLD = 14;
   const LINK_HIT_WIDTH = 16;
 
   function parseCssColor(value, fallback) {
@@ -145,6 +146,8 @@
 
       this.canvas = this.app.view;
       this.canvas.id = 'pixi-layer';
+      this.canvas.style.webkitTapHighlightColor = 'transparent';
+      this.canvas.style.outline = 'none';
 
       if (this.overlay?.parentNode === this.container) {
         this.container.insertBefore(this.canvas, this.overlay);
@@ -929,7 +932,8 @@
       const movedDistance = Math.hypot(moveX, moveY);
 
       if (session.type === 'node') {
-        if (!session.draggingLink && movedDistance >= POINTER_DRAG_THRESHOLD) {
+        const nodeDragThreshold = nativeEvent.pointerType === 'touch' ? TOUCH_DRAG_THRESHOLD : POINTER_DRAG_THRESHOLD;
+        if (!session.draggingLink && movedDistance >= nodeDragThreshold) {
           session.draggingLink = true;
           this.clearHoverTarget();
           this.invokeInteractionHandler('onArrowDragStart', session.node, nativeEvent, pointerData);
@@ -1008,10 +1012,12 @@
       }
 
       this.clearPointerSession();
-      if (this.isPointerInsideCanvas(pointerData)) {
-        this.updateHoverFromPointer(pointerData, nativeEvent);
-      } else {
-        this.clearHoverTarget();
+      if (nativeEvent.pointerType !== 'touch') {
+        if (this.isPointerInsideCanvas(pointerData)) {
+          this.updateHoverFromPointer(pointerData, nativeEvent);
+        } else {
+          this.clearHoverTarget();
+        }
       }
     }
 

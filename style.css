@@ -273,6 +273,13 @@ body.pixi-interaction-mode #pixi-layer {
   z-index: 2;
   pointer-events: auto;
   touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+#pixi-layer canvas {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 
 body.pixi-interaction-mode #map-svg {
