@@ -31,6 +31,7 @@ let ctxTarget = null;
 let modalCallback = null;
 let hoveredNodeId = null;
 let hoveredLinkId = null;
+let arrowDragTargetId = null;
 let width = 0;
 let height = 0;
 let layoutRunId = 0;
@@ -326,8 +327,22 @@ function renderVisibleGraph() {
     linkLodOpacity,
     hoveredNodeId,
     hoveredLinkId,
+    arrowDragTargetId,
     lightweightMode: document.body.classList.contains('lightweight-mode'),
   });
+}
+
+function findNodeAtPosition(x, y, { excludeNodeId = null, padding = 8 } = {}) {
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const node = nodes[index];
+    if (node.id === excludeNodeId) continue;
+    const dx = (node.x ?? 0) - x;
+    const dy = (node.y ?? 0) - y;
+    if (Math.sqrt(dx * dx + dy * dy) <= node.r + padding) {
+      return node;
+    }
+  }
+  return null;
 }
 
 function updateBiDir() {
@@ -1294,6 +1309,7 @@ function restart({ layout = true, fit = layout, seed = false } = {}) {
 
 function onArrowDragStart(event, node) {
   arrowSrc = node;
+  arrowDragTargetId = null;
   if (usePixiRenderer) {
     pixiRenderer.setDragLine({ visible: true, x1: node.x, y1: node.y, x2: node.x, y2: node.y });
   } else {
@@ -1309,6 +1325,16 @@ function onArrowDragStart(event, node) {
 
 function onArrowDragMove(event) {
   // event.x/y はD3がタッチ・マウス問わず正しく計算した mainGroup 座標
+  const target = arrowSrc
+    ? findNodeAtPosition(event.x, event.y, { excludeNodeId: arrowSrc.id })
+    : null;
+  const nextTargetId = target?.id ?? null;
+
+  if (arrowDragTargetId !== nextTargetId) {
+    arrowDragTargetId = nextTargetId;
+    renderVisibleGraph();
+  }
+
   if (usePixiRenderer) {
     pixiRenderer.setDragLine({ visible: true, x1: arrowSrc?.x ?? event.x, y1: arrowSrc?.y ?? event.y, x2: event.x, y2: event.y });
   } else {
@@ -1322,15 +1348,13 @@ function onArrowDragEnd(event) {
   } else {
     dragLine.attr('visibility', 'hidden');
   }
-  if (!arrowSrc) return;
+  if (!arrowSrc) {
+    arrowDragTargetId = null;
+    return;
+  }
 
   const mouseX = event.x, mouseY = event.y;
-  const target = nodes.find(node => {
-    if (node.id === arrowSrc.id) return false;
-    const dx = (node.x ?? 0) - mouseX;
-    const dy = (node.y ?? 0) - mouseY;
-    return Math.sqrt(dx * dx + dy * dy) <= node.r + 8;
-  });
+  const target = findNodeAtPosition(mouseX, mouseY, { excludeNodeId: arrowSrc.id });
 
   if (target) {
     const existing = links.find(link =>
@@ -1340,6 +1364,10 @@ function onArrowDragEnd(event) {
   }
 
   arrowSrc = null;
+  if (arrowDragTargetId !== null) {
+    arrowDragTargetId = null;
+    renderVisibleGraph();
+  }
 }
 
 function onNodeClick(event, node) {

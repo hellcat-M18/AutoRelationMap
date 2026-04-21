@@ -80,6 +80,13 @@
     graphics.endFill();
   }
 
+  function drawOccluderCircle(graphics, radius, color) {
+    graphics.clear();
+    graphics.beginFill(color, 1);
+    graphics.drawCircle(0, 0, radius);
+    graphics.endFill();
+  }
+
   class PixiGraphRenderer {
     constructor({ containerId, overlayId }) {
       this.enabled = false;
@@ -237,6 +244,7 @@
 
     createNodeView() {
       const root = new PIXI.Container();
+      const occluder = new PIXI.Graphics();
       const backdrop = new PIXI.Graphics();
       const sprite = new PIXI.Sprite(PIXI.Texture.EMPTY);
       const mask = new PIXI.Graphics();
@@ -247,11 +255,12 @@
       sprite.mask = mask;
       label.anchor.set(0.5, 0);
 
-      root.addChild(backdrop, sprite, ring, label, mask);
+      root.addChild(occluder, backdrop, sprite, ring, label, mask);
       this.nodeLayer.addChild(root);
 
       return {
         root,
+        occluder,
         backdrop,
         sprite,
         mask,
@@ -332,6 +341,7 @@
         linkLodOpacity,
         hoveredNodeId,
         hoveredLinkId,
+        arrowDragTargetId,
       } = options;
 
       this.sceneState = options;
@@ -438,13 +448,15 @@
         const selected = node.id === selectedNodeId;
         const connected = connectedIds.has(node.id);
         const searchMatch = searchMatchSet.has(node.id);
-        const hovered = hoveredNodeId === node.id;
+        const hovered = hoveredNodeId === node.id || arrowDragTargetId === node.id;
         const baseLod = calcLodOpacity(node.r);
         const selectionLod = selectionActive && !selected && !connected && !searchMatch ? 0.18 : 1;
         const alpha = baseLod * selectionLod;
 
         view.root.visible = true;
         view.root.position.set(node.x ?? 0, node.y ?? 0);
+
+        drawOccluderCircle(view.occluder, node.r + 2, this.colors.mapBg);
 
         view.backdrop.clear();
         view.backdrop.beginFill(this.colors.blankNodeFill, alpha);
@@ -753,8 +765,20 @@
         return;
       }
 
-      if (session.type === 'link' && movedDistance >= POINTER_DRAG_THRESHOLD) {
-        session.moved = true;
+      if (session.type === 'link') {
+        if (!session.panning && movedDistance >= POINTER_DRAG_THRESHOLD) {
+          session.panning = true;
+          session.moved = true;
+          this.clearHoverTarget();
+        }
+        if (session.panning) {
+          this.emitViewTransformChange({
+            x: session.startTransform.x + moveX,
+            y: session.startTransform.y + moveY,
+            k: session.startTransform.k,
+          });
+        }
+        this.updateCanvasCursor();
       }
     }
 
