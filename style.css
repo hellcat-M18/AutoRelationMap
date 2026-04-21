@@ -804,7 +804,7 @@ button:hover { background: #d0dcea; }
     min-width: 260px;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
-    z-index: 50;
+    z-index: 60;
     box-shadow: 4px 0 20px #0003;
   }
   #sidebar.drawer-open {

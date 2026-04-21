@@ -1392,6 +1392,7 @@ document.getElementById('btn-add-person').addEventListener('click', async () => 
   document.getElementById('input-icon').value = '';
 
   restart({ layout: true, fit: true });
+  if (isMobile()) closeDrawer();
 });
 
 document.getElementById('btn-relayout').addEventListener('click', () => {
