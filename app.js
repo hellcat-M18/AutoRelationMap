@@ -475,9 +475,7 @@ function applySelectionState() {
 
 function updateDetailFab(node) {
   const btn = document.getElementById('btn-open-detail');
-  const label = document.getElementById('btn-open-detail-label');
   if (!btn) return;
-  label.textContent = node.name;
   btn.classList.remove('hidden');
 }
 
