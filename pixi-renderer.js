@@ -341,6 +341,7 @@
         linkLodOpacity,
         hoveredNodeId,
         hoveredLinkId,
+        arrowDragSourceId,
         arrowDragTargetId,
       } = options;
 
@@ -448,7 +449,9 @@
         const selected = node.id === selectedNodeId;
         const connected = connectedIds.has(node.id);
         const searchMatch = searchMatchSet.has(node.id);
-        const hovered = hoveredNodeId === node.id || arrowDragTargetId === node.id;
+        const hovered = hoveredNodeId === node.id
+          || arrowDragSourceId === node.id
+          || arrowDragTargetId === node.id;
         const baseLod = calcLodOpacity(node.r);
         const selectionLod = selectionActive && !selected && !connected && !searchMatch ? 0.18 : 1;
         const alpha = baseLod * selectionLod;

@@ -423,12 +423,36 @@ body.pixi-interaction-mode #map-svg {
   border-radius: 12px;
   padding: 24px 28px;
   min-width: 300px;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-#modal h3 { color: #1a6fa5; }
+#modal h3 {
+  color: #1a6fa5;
+  padding-right: 72px;
+}
 #modal p  { font-size: 0.85rem; color: #778899; }
+
+#modal-limit-badge {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #d6e1ee;
+  background: #eef4fb;
+  color: #5d6b79;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#modal-limit-badge.over-limit {
+  border-color: #efb3be;
+  background: #fff1f3;
+  color: #b63c55;
+}
 
 .modal-buttons {
   display: flex;

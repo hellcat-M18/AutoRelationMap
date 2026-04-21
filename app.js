@@ -11,6 +11,7 @@ const R_MAX = 110;
 const FORCE_LINK_GAP = 330;
 const COLLIDE_PADDING = 135;
 const BIDIR_SPLIT_OFFSET = 6;
+const MAX_OUTGOING_LINKS = 25;
 const MIN_VIEW_SCALE = 0.1;
 const MAX_VIEW_SCALE = 5;
 
@@ -327,6 +328,7 @@ function renderVisibleGraph() {
     linkLodOpacity,
     hoveredNodeId,
     hoveredLinkId,
+    arrowDragSourceId: arrowSrc?.id ?? null,
     arrowDragTargetId,
     lightweightMode: document.body.classList.contains('lightweight-mode'),
   });
@@ -502,11 +504,26 @@ function closeDetailPanel() {
   }
 }
 
+function hideModalLimitBadge() {
+  const badge = document.getElementById('modal-limit-badge');
+  badge.textContent = '';
+  badge.classList.add('hidden');
+  badge.classList.remove('over-limit');
+}
+
+function showModalLimitBadge(current, max) {
+  const badge = document.getElementById('modal-limit-badge');
+  badge.textContent = `${current}/${max}`;
+  badge.classList.remove('hidden');
+  badge.classList.toggle('over-limit', current > max);
+}
+
 // ---- ノード編集共通ロジック（詳細パネルボタン・右クリックメニュー共用） ----
 function openEditNameDialog(node) {
   const titleEl = document.getElementById('modal-title');
   const descEl  = document.getElementById('modal-desc');
   const inputEl = document.getElementById('modal-input');
+  hideModalLimitBadge();
   titleEl.textContent = '名前を変更';
   descEl.textContent  = '';
   inputEl.value       = node.name;
@@ -1310,6 +1327,7 @@ function restart({ layout = true, fit = layout, seed = false } = {}) {
 function onArrowDragStart(event, node) {
   arrowSrc = node;
   arrowDragTargetId = null;
+  renderVisibleGraph();
   if (usePixiRenderer) {
     pixiRenderer.setDragLine({ visible: true, x1: node.x, y1: node.y, x2: node.x, y2: node.y });
   } else {
@@ -1349,7 +1367,10 @@ function onArrowDragEnd(event) {
     dragLine.attr('visibility', 'hidden');
   }
   if (!arrowSrc) {
-    arrowDragTargetId = null;
+    if (arrowDragTargetId !== null) {
+      arrowDragTargetId = null;
+      renderVisibleGraph();
+    }
     return;
   }
 
@@ -1363,9 +1384,10 @@ function onArrowDragEnd(event) {
     openLabelModal(arrowSrc, target, existing ?? null);
   }
 
+  const hadArrowDragState = arrowSrc !== null || arrowDragTargetId !== null;
   arrowSrc = null;
-  if (arrowDragTargetId !== null) {
-    arrowDragTargetId = null;
+  arrowDragTargetId = null;
+  if (hadArrowDragState) {
     renderVisibleGraph();
   }
 }
@@ -1475,9 +1497,12 @@ function openLabelModal(source, target, existing) {
   const overlay = document.getElementById('modal-overlay');
   const desc = document.getElementById('modal-desc');
   const input = document.getElementById('modal-input');
+  const outCount = links.filter(l => getLinkSourceId(l) === source.id).length;
+  const projectedOutCount = outCount + (existing ? 0 : 1);
 
   desc.textContent = `${source.name}  →  ${target.name}`;
   input.value = existing?.label ?? '';
+  showModalLimitBadge(projectedOutCount, MAX_OUTGOING_LINKS);
   overlay.classList.remove('hidden');
   input.focus();
 
@@ -1490,9 +1515,9 @@ function openLabelModal(source, target, existing) {
       return;
     }
 
-    const outCount = links.filter(l => getLinkSourceId(l) === source.id).length;
-    if (outCount >= 10) {
-      showNotify(`「${source.name}」から出る矢印は最大10本までです。`);
+    const currentOutCount = links.filter(l => getLinkSourceId(l) === source.id).length;
+    if (currentOutCount >= MAX_OUTGOING_LINKS) {
+      showNotify(`「${source.name}」から出る矢印は最大${MAX_OUTGOING_LINKS}本までです。`);
       return;
     }
 
@@ -1508,6 +1533,7 @@ function openLabelModal(source, target, existing) {
 
 function closeModal(ok, label) {
   document.getElementById('modal-overlay').classList.add('hidden');
+  hideModalLimitBadge();
   if (ok && modalCallback) modalCallback(label ?? '');
   modalCallback = null;
 }
