@@ -499,8 +499,8 @@
           || arrowDragSourceId === node.id
           || arrowDragTargetId === node.id;
         const visible = !lightweightMode || !selectionActive || selected || connected;
-        // スクリーン上の見かけのサイズでLODを計算（ズームイン時に小ノードが濃くなる）
-        const screenR = node.r * this.viewTransform.k;
+        // スクリーン上の見かけのサイズでLODを計算（ズームイン時は濃く、ズームアウト時は初期視点より薄くしない）
+        const screenR = node.r * Math.max(1, this.viewTransform.k);
         const baseLod = calcLodOpacity(screenR);
         const selectionLod = selectionActive && !selected && !connected && !searchMatch ? 0.18 : 1;
         const alpha = baseLod * selectionLod;
