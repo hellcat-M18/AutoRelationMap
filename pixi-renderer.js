@@ -224,6 +224,8 @@
       };
       this.world.position.set(this.viewTransform.x, this.viewTransform.y);
       this.world.scale.set(this.viewTransform.k, this.viewTransform.k);
+      // ズーム変化をLOD opacity に即時反映
+      if (this.sceneState) this.renderScene(this.sceneState);
     }
 
     setDragLine({ visible, x1, y1, x2, y2 }) {
