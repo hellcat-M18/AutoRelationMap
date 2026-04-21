@@ -464,12 +464,26 @@ function applySelectionState() {
 
   if (selectedNodeId !== null) {
     const node = nodeById(selectedNodeId);
-    if (node) openDetailPanel(node);
+    if (node) updateDetailFab(node);
   } else {
     closeDetailPanel();
+    hideDetailFab();
   }
 
   renderVisibleGraph();
+}
+
+function updateDetailFab(node) {
+  const btn = document.getElementById('btn-open-detail');
+  const label = document.getElementById('btn-open-detail-label');
+  if (!btn) return;
+  label.textContent = node.name;
+  btn.classList.remove('hidden');
+}
+
+function hideDetailFab() {
+  const btn = document.getElementById('btn-open-detail');
+  if (btn) btn.classList.add('hidden');
 }
 
 function nodeChip(n) {
@@ -1710,7 +1724,21 @@ document.getElementById('notify-ok').addEventListener('click', () => {
 });
 
 document.getElementById('detail-close').addEventListener('click', () => {
-  clearSelection();
+  // パネルだけ閉じる。選択ハイライトは維持してFABを再表示
+  closeDetailPanel();
+  if (selectedNodeId !== null) {
+    const node = nodeById(selectedNodeId);
+    if (node) updateDetailFab(node);
+  }
+});
+
+document.getElementById('btn-open-detail').addEventListener('click', () => {
+  if (selectedNodeId === null) return;
+  const node = nodeById(selectedNodeId);
+  if (node) {
+    hideDetailFab();
+    openDetailPanel(node);
+  }
 });
 
 // ハンバーガー・モバイルオーバーレイ
@@ -1720,7 +1748,17 @@ document.getElementById('btn-hamburger').addEventListener('click', () => {
 });
 document.getElementById('mobile-overlay').addEventListener('click', () => {
   closeDrawer();
-  clearSelection(); // 詳細パネルも閉じる
+  // 詳細パネルが開いていれば閉じてFABを復元、なければ選択解除
+  const detailOpen = document.getElementById('detail-panel').classList.contains('open');
+  if (detailOpen) {
+    closeDetailPanel();
+    if (selectedNodeId !== null) {
+      const node = nodeById(selectedNodeId);
+      if (node) updateDetailFab(node);
+    }
+  } else {
+    clearSelection();
+  }
 });
 
 document.getElementById('ctx-delete').addEventListener('click', () => {

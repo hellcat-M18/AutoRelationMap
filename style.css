@@ -686,6 +686,37 @@ body.pixi-interaction-mode #map-svg {
 }
 #tooltip.hidden { display: none; }
 
+/* ========== 詳細FABボタン（ノード選択中に表示） ========== */
+#btn-open-detail {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 28px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent, #1a4a80);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 16px #0003;
+  transition: opacity 0.18s, transform 0.18s;
+  white-space: nowrap;
+}
+#btn-open-detail:hover {
+  background: #16396a;
+}
+#btn-open-detail.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(12px);
+}
+
 /* ========== 右側詳細パネル ========== */
 #detail-panel {
   width: 0;
