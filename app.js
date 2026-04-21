@@ -375,17 +375,23 @@ function clearSelection() {
   applySelectionState();
 }
 
+function getConnectedNodeIds(centerNodeId) {
+  const connectedIds = new Set();
+  if (centerNodeId === null) return connectedIds;
+
+  links.forEach(link => {
+    const src = getLinkSourceId(link);
+    const tgt = getLinkTargetId(link);
+    if (src === centerNodeId) connectedIds.add(tgt);
+    if (tgt === centerNodeId) connectedIds.add(src);
+  });
+
+  return connectedIds;
+}
+
 function applySelectionState() {
   // 選択ノードに隣接するノードIDセットを構築
-  const connectedIds = new Set();
-  if (selectedNodeId !== null) {
-    links.forEach(link => {
-      const src = getLinkSourceId(link);
-      const tgt = getLinkTargetId(link);
-      if (src === selectedNodeId) connectedIds.add(tgt);
-      if (tgt === selectedNodeId) connectedIds.add(src);
-    });
-  }
+  const connectedIds = getConnectedNodeIds(selectedNodeId);
 
   nodeGroup.selectAll('g.node-group')
     .classed('selected',  node => node.id === selectedNodeId)
@@ -1074,7 +1080,6 @@ function syncGraphElements() {
   const linkEnter = linkSelection.enter()
     .append('path')
     .attr('class', 'link-path')
-    .on('click', onLinkClick)
     .on('contextmenu', onLinkRightClick)
     .on('mouseover', onLinkPointerEnter)
     .on('mouseout', onLinkPointerLeave);
@@ -1506,12 +1511,6 @@ function onNodeRightClick(event, node) {
   showContextMenu(event.clientX, event.clientY, node);
 }
 
-function onLinkClick(event, link) {
-  event.stopPropagation();
-  hideContextMenu();
-  openLabelModal(getLinkSourceNode(link), getLinkTargetNode(link), link);
-}
-
 function onLinkPointerEnter(event, link) {
   hoveredLinkId = link.id;
   showTooltip(event, link.label || '（ラベルなし）');
@@ -1562,7 +1561,6 @@ if (usePixiRenderer) {
     onArrowDragStart,
     onBackgroundContextMenu,
     onBackgroundClick: onBackgroundPointerTap,
-    onLinkClick,
     onLinkContextMenu: onLinkRightClick,
     onLinkPointerEnter,
     onLinkPointerLeave,

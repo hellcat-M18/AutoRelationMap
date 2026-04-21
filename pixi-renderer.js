@@ -293,6 +293,7 @@
         ring,
         label,
         iconSrc: '',
+        visibleForHit: false,
       };
     }
 
@@ -369,6 +370,7 @@
         hoveredLinkId,
         arrowDragSourceId,
         arrowDragTargetId,
+        lightweightMode,
       } = options;
 
       this.sceneState = options;
@@ -491,11 +493,15 @@
         const hovered = hoveredNodeId === node.id
           || arrowDragSourceId === node.id
           || arrowDragTargetId === node.id;
+        const visible = !lightweightMode || !selectionActive || selected || connected;
         const baseLod = calcLodOpacity(node.r);
         const selectionLod = selectionActive && !selected && !connected && !searchMatch ? 0.18 : 1;
         const alpha = baseLod * selectionLod;
 
-        view.root.visible = true;
+        view.visibleForHit = visible;
+        view.root.visible = visible;
+        if (!visible) return;
+
         view.root.position.set(node.x ?? 0, node.y ?? 0);
 
         drawOccluderCircle(view.occluder, node.r + 2, this.colors.mapBg);
@@ -614,6 +620,8 @@
       const nodes = this.sceneState?.nodes ?? [];
       for (let index = nodes.length - 1; index >= 0; index -= 1) {
         const node = nodes[index];
+        const view = this.nodeViews.get(node.id);
+        if (!view?.visibleForHit) continue;
         const dx = (node.x ?? 0) - pointerData.worldX;
         const dy = (node.y ?? 0) - pointerData.worldY;
         if (Math.hypot(dx, dy) <= node.r + 10) return node;

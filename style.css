@@ -205,6 +205,15 @@ body.lightweight-mode #map-svg.selection-active .link-group path.link-bidir-seco
 body.lightweight-mode #map-svg.selection-active .label-group text.link-label.highlighted {
   opacity: 1;
 }
+body.lightweight-mode #map-svg.selection-active .node-group {
+  opacity: 0;
+  pointer-events: none;
+}
+body.lightweight-mode #map-svg.selection-active .node-group.selected,
+body.lightweight-mode #map-svg.selection-active .node-group.connected {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 /* ファイル選択を button 風に見せる */
 .file-label {
