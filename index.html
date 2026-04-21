@@ -107,6 +107,7 @@
   <!-- 関係ラベル・名前入力モーダル -->
   <div id="modal-overlay" class="hidden">
     <div id="modal">
+      <span id="modal-limit-badge" class="hidden"></span>
       <h3 id="modal-title">関係を入力</h3>
       <p id="modal-desc"></p>
       <input type="text" id="modal-input" placeholder="例：友人、同僚、ライバル" maxlength="30" />
@@ -179,6 +180,8 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="/supabase-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
+  <script src="/pixi-renderer.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

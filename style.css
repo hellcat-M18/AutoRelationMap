@@ -239,12 +239,36 @@ body.lightweight-mode #map-svg.selection-active .label-group text.link-label.hig
   background: var(--map-bg);
 }
 
-#map-svg {
+#pixi-layer {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+#map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 2;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+body.pixi-interaction-mode #pixi-layer {
+  z-index: 2;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+body.pixi-interaction-mode #map-svg {
+  z-index: 1;
+  pointer-events: none;
 }
 
 /* ズーム/パンをGPUコンポジット層で処理する */
@@ -257,6 +281,19 @@ body.lightweight-mode #map-svg.selection-active .label-group text.link-label.hig
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+#map-svg.pixi-hit-layer .label-group {
+  display: none;
+}
+
+#map-svg.pixi-hit-layer .node-group image,
+#map-svg.pixi-hit-layer .node-group .node-ring,
+#map-svg.pixi-hit-layer .node-group .node-label,
+#map-svg.pixi-hit-layer .node-group .node-occluder,
+#map-svg.pixi-hit-layer .node-group clipPath,
+#map-svg.pixi-hit-layer #drag-line {
+  display: none;
 }
 
 /* リンク（矢印線） */
@@ -446,12 +483,36 @@ body.lightweight-mode #map-svg.selection-active .label-group text.link-label.hig
   border-radius: 12px;
   padding: 24px 28px;
   min-width: 300px;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-#modal h3 { color: #1a6fa5; }
+#modal h3 {
+  color: #1a6fa5;
+  padding-right: 72px;
+}
 #modal p  { font-size: 0.85rem; color: #778899; }
+
+#modal-limit-badge {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #d6e1ee;
+  background: #eef4fb;
+  color: #5d6b79;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#modal-limit-badge.over-limit {
+  border-color: #efb3be;
+  background: #fff1f3;
+  color: #b63c55;
+}
 
 .modal-buttons {
   display: flex;

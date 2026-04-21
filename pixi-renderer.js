@@ -1,0 +1,906 @@
+(function () {
+  const MIN_SCALE = 0.1;
+  const MAX_SCALE = 5;
+  const POINTER_DRAG_THRESHOLD = 6;
+  const LINK_HIT_WIDTH = 16;
+
+  function parseCssColor(value, fallback) {
+    if (!value) return fallback;
+    const text = String(value).trim();
+    if (text.startsWith('#')) {
+      const hex = text.slice(1);
+      const normalized = hex.length === 3
+        ? hex.split('').map(part => part + part).join('')
+        : hex;
+      const parsed = Number.parseInt(normalized, 16);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+    const match = text.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (!match) return fallback;
+    const red = Number.parseInt(match[1], 10);
+    const green = Number.parseInt(match[2], 10);
+    const blue = Number.parseInt(match[3], 10);
+    return (red << 16) + (green << 8) + blue;
+  }
+
+  function getThemeColors() {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      mapBg: parseCssColor(root.getPropertyValue('--map-bg'), 0xf0f4f8),
+      graphAccent: parseCssColor(root.getPropertyValue('--graph-accent'), 0x1a6fa5),
+      graphHover: parseCssColor(root.getPropertyValue('--graph-hover'), 0xe03060),
+      graphOut: parseCssColor(root.getPropertyValue('--graph-out'), 0xff7043),
+      graphIn: parseCssColor(root.getPropertyValue('--graph-in'), 0x42a5f5),
+      blankNodeFill: 0xdde8f5,
+      nodeText: 0x1a1a2e,
+      nodeConnected: 0x00968a,
+      nodeHover: 0xd4900a,
+      nodeSearch: 0xe0820c,
+      white: 0xffffff,
+    };
+  }
+
+  function cloneTextStyle(style) {
+    return typeof style.clone === 'function' ? style.clone() : new PIXI.TextStyle(style);
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function distancePointToSegment(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared === 0) return Math.hypot(px - ax, py - ay);
+    const t = clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1);
+    const closestX = ax + dx * t;
+    const closestY = ay + dy * t;
+    return Math.hypot(px - closestX, py - closestY);
+  }
+
+  function pointOnQuadraticBezier(sx, sy, cpx, cpy, ex, ey, t) {
+    const u = 1 - t;
+    return {
+      x: u * u * sx + 2 * u * t * cpx + t * t * ex,
+      y: u * u * sy + 2 * u * t * cpy + t * t * ey,
+    };
+  }
+
+  function distancePointToQuadratic(px, py, sx, sy, cpx, cpy, ex, ey, segments = 20) {
+    let minDistance = Infinity;
+    let previousPoint = { x: sx, y: sy };
+
+    for (let index = 1; index <= segments; index += 1) {
+      const currentPoint = pointOnQuadraticBezier(sx, sy, cpx, cpy, ex, ey, index / segments);
+      minDistance = Math.min(
+        minDistance,
+        distancePointToSegment(px, py, previousPoint.x, previousPoint.y, currentPoint.x, currentPoint.y)
+      );
+      previousPoint = currentPoint;
+    }
+
+    return minDistance;
+  }
+
+  function drawArrowHead(graphics, fromX, fromY, toX, toY, width, color, alpha) {
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const distance = Math.hypot(dx, dy) || 1;
+    const ux = dx / distance;
+    const uy = dy / distance;
+    const nx = -uy;
+    const ny = ux;
+    const arrowLength = Math.max(8, width * 4.5);
+    const arrowWidth = Math.max(5, width * 2.8);
+    const baseX = toX - ux * arrowLength;
+    const baseY = toY - uy * arrowLength;
+
+    graphics.beginFill(color, alpha);
+    graphics.moveTo(toX, toY);
+    graphics.lineTo(baseX + nx * arrowWidth * 0.5, baseY + ny * arrowWidth * 0.5);
+    graphics.lineTo(baseX - nx * arrowWidth * 0.5, baseY - ny * arrowWidth * 0.5);
+    graphics.closePath();
+    graphics.endFill();
+  }
+
+  function drawOccluderCircle(graphics, radius, color) {
+    graphics.clear();
+    graphics.beginFill(color, 1);
+    graphics.drawCircle(0, 0, radius);
+    graphics.endFill();
+  }
+
+  class PixiGraphRenderer {
+    constructor({ containerId, overlayId }) {
+      this.enabled = false;
+      this.container = document.getElementById(containerId);
+      this.overlay = document.getElementById(overlayId);
+      this.nodeViews = new Map();
+      this.linkViews = new Map();
+      this.colors = getThemeColors();
+      this.sceneState = null;
+      this.interactionHandlers = {};
+      this.viewTransform = { x: 0, y: 0, k: 1 };
+      this.hoverTarget = null;
+      this.pointerSession = null;
+
+      if (!window.PIXI || !this.container) return;
+
+      try {
+        this.app = new PIXI.Application({
+          width: this.container.clientWidth || 800,
+          height: this.container.clientHeight || 600,
+          antialias: true,
+          backgroundAlpha: 0,
+          autoDensity: true,
+          resolution: window.devicePixelRatio || 1,
+        });
+      } catch (error) {
+        console.error('Pixi initialization failed:', error);
+        return;
+      }
+
+      this.canvas = this.app.view;
+      this.canvas.id = 'pixi-layer';
+
+      if (this.overlay?.parentNode === this.container) {
+        this.container.insertBefore(this.canvas, this.overlay);
+      } else {
+        this.container.prepend(this.canvas);
+      }
+
+      this.world = new PIXI.Container();
+      this.linkLayer = new PIXI.Container();
+      this.labelLayer = new PIXI.Container();
+      this.nodeLayer = new PIXI.Container();
+      this.dragLayer = new PIXI.Container();
+      this.dragGraphics = new PIXI.Graphics();
+
+      this.dragLayer.addChild(this.dragGraphics);
+      this.world.addChild(this.linkLayer, this.labelLayer, this.nodeLayer, this.dragLayer);
+      this.app.stage.addChild(this.world);
+
+      this.nodeLabelStyle = new PIXI.TextStyle({
+        fill: this.colors.nodeText,
+        fontSize: 13,
+        fontWeight: '700',
+        align: 'center',
+        stroke: this.colors.white,
+        strokeThickness: 5,
+        lineJoin: 'round',
+      });
+      this.linkLabelStyle = new PIXI.TextStyle({
+        fill: this.colors.graphAccent,
+        fontSize: 11,
+        fontWeight: '700',
+        align: 'center',
+        stroke: this.colors.white,
+        strokeThickness: 5,
+        lineJoin: 'round',
+      });
+
+      this.handleCanvasPointerDown = this.handleCanvasPointerDown.bind(this);
+      this.handleCanvasPointerMove = this.handleCanvasPointerMove.bind(this);
+      this.handleCanvasPointerLeave = this.handleCanvasPointerLeave.bind(this);
+      this.handleCanvasContextMenu = this.handleCanvasContextMenu.bind(this);
+      this.handleWheel = this.handleWheel.bind(this);
+      this.handleWindowPointerMove = this.handleWindowPointerMove.bind(this);
+      this.handleWindowPointerUp = this.handleWindowPointerUp.bind(this);
+
+      this.installInteractionListeners();
+      this.enabled = true;
+      this.updateCanvasCursor();
+    }
+
+    installInteractionListeners() {
+      this.canvas.addEventListener('pointerdown', this.handleCanvasPointerDown);
+      this.canvas.addEventListener('pointermove', this.handleCanvasPointerMove);
+      this.canvas.addEventListener('pointerleave', this.handleCanvasPointerLeave);
+      this.canvas.addEventListener('contextmenu', this.handleCanvasContextMenu);
+      this.canvas.addEventListener('wheel', this.handleWheel, { passive: false });
+    }
+
+    setInteractionHandlers(handlers) {
+      this.interactionHandlers = handlers ?? {};
+    }
+
+    resize(width, height) {
+      if (!this.enabled) return;
+      this.app.renderer.resize(width, height);
+    }
+
+    setViewTransform(transform) {
+      if (!this.enabled) return;
+      this.viewTransform = {
+        x: Number.isFinite(transform?.x) ? transform.x : 0,
+        y: Number.isFinite(transform?.y) ? transform.y : 0,
+        k: clamp(Number.isFinite(transform?.k) ? transform.k : 1, MIN_SCALE, MAX_SCALE),
+      };
+      this.world.position.set(this.viewTransform.x, this.viewTransform.y);
+      this.world.scale.set(this.viewTransform.k, this.viewTransform.k);
+    }
+
+    setDragLine({ visible, x1, y1, x2, y2 }) {
+      if (!this.enabled) return;
+      this.colors = getThemeColors();
+      this.dragGraphics.clear();
+      if (!visible) return;
+      this.dragGraphics.lineStyle({
+        width: 2,
+        color: this.colors.graphAccent,
+        alpha: 0.95,
+        cap: PIXI.LINE_CAP.ROUND,
+        join: PIXI.LINE_JOIN.ROUND,
+      });
+      this.dragGraphics.moveTo(x1, y1);
+      this.dragGraphics.lineTo(x2, y2);
+    }
+
+    syncGraphElements({ nodes, links }) {
+      if (!this.enabled) return;
+
+      const liveNodeIds = new Set(nodes.map(node => node.id));
+      for (const [id, view] of this.nodeViews) {
+        if (liveNodeIds.has(id)) continue;
+        view.root.destroy({ children: true });
+        this.nodeViews.delete(id);
+      }
+      nodes.forEach(node => {
+        if (!this.nodeViews.has(node.id)) {
+          this.nodeViews.set(node.id, this.createNodeView());
+        }
+      });
+
+      const liveLinkIds = new Set(links.map(link => link.id));
+      for (const [id, view] of this.linkViews) {
+        if (liveLinkIds.has(id)) continue;
+        view.graphics.destroy();
+        view.label.destroy();
+        this.linkViews.delete(id);
+      }
+      links.forEach(link => {
+        if (!this.linkViews.has(link.id)) {
+          this.linkViews.set(link.id, this.createLinkView());
+        }
+      });
+    }
+
+    createNodeView() {
+      const root = new PIXI.Container();
+      const occluder = new PIXI.Graphics();
+      const backdrop = new PIXI.Graphics();
+      const sprite = new PIXI.Sprite(PIXI.Texture.EMPTY);
+      const mask = new PIXI.Graphics();
+      const ring = new PIXI.Graphics();
+      const label = new PIXI.Text('', cloneTextStyle(this.nodeLabelStyle));
+
+      sprite.anchor.set(0.5, 0.5);
+      sprite.mask = mask;
+      label.anchor.set(0.5, 0);
+
+      root.addChild(occluder, backdrop, sprite, ring, label, mask);
+      this.nodeLayer.addChild(root);
+
+      return {
+        root,
+        occluder,
+        backdrop,
+        sprite,
+        mask,
+        ring,
+        label,
+        iconSrc: '',
+      };
+    }
+
+    createLinkView() {
+      const graphics = new PIXI.Graphics();
+      const label = new PIXI.Text('', cloneTextStyle(this.linkLabelStyle));
+      label.anchor.set(0.5, 0.5);
+      this.linkLayer.addChild(graphics);
+      this.labelLayer.addChild(label);
+      return {
+        graphics,
+        label,
+        lastGeometry: null,
+        visibleForHit: false,
+      };
+    }
+
+    getLinkVisualState(link, state = this.sceneState) {
+      if (!state) {
+        return { highlightType: 'none', primaryBidir: false, secondaryVisible: false, split: false, visible: false };
+      }
+
+      const {
+        selectedNodeId,
+        biDirPrimarySet,
+        biDirSecondarySet,
+        getLinkSourceId,
+        getLinkTargetId,
+        isBidirSplit,
+        lightweightMode,
+      } = state;
+
+      const secondary = biDirSecondarySet.has(link.id);
+      const split = isBidirSplit(link);
+      const secondaryVisible = secondary && split;
+      const primaryBidir = biDirPrimarySet.has(link.id);
+
+      let highlightType = 'none';
+      if (selectedNodeId !== null) {
+        if (primaryBidir && !split) {
+          if (getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId) {
+            highlightType = 'bidir';
+          }
+        } else if (getLinkSourceId(link) === selectedNodeId) {
+          highlightType = 'out';
+        } else if (getLinkTargetId(link) === selectedNodeId) {
+          highlightType = 'in';
+        }
+      }
+
+      const baseVisible = !secondary || secondaryVisible;
+      const visible = lightweightMode
+        ? baseVisible && selectedNodeId !== null && highlightType !== 'none'
+        : baseVisible;
+
+      return { highlightType, primaryBidir, secondaryVisible, split, visible };
+    }
+
+    renderScene(options) {
+      if (!this.enabled) return;
+
+      const {
+        nodes,
+        links,
+        selectedNodeId,
+        searchMatchSet,
+        computeLinkGeometry,
+        getLabelMidpoint,
+        getLinkSourceId,
+        getLinkTargetId,
+        calcLodOpacity,
+        linkLodOpacity,
+        hoveredNodeId,
+        hoveredLinkId,
+        arrowDragSourceId,
+        arrowDragTargetId,
+      } = options;
+
+      this.sceneState = options;
+      this.colors = getThemeColors();
+      this.syncGraphElements({ nodes, links });
+
+      const connectedIds = new Set();
+      if (selectedNodeId !== null) {
+        links.forEach(link => {
+          const sourceId = getLinkSourceId(link);
+          const targetId = getLinkTargetId(link);
+          if (sourceId === selectedNodeId) connectedIds.add(targetId);
+          if (targetId === selectedNodeId) connectedIds.add(sourceId);
+        });
+      }
+
+      const selectionActive = selectedNodeId !== null;
+
+      links.forEach(link => {
+        const view = this.linkViews.get(link.id);
+        if (!view) return;
+
+        const geometry = computeLinkGeometry(link);
+        const { highlightType, primaryBidir, secondaryVisible, split, visible } = this.getLinkVisualState(link, options);
+        const hover = hoveredLinkId === link.id;
+
+        view.lastGeometry = geometry;
+        view.visibleForHit = Boolean(geometry && visible);
+
+        if (!geometry || !visible) {
+          view.graphics.visible = false;
+          view.label.visible = false;
+          return;
+        }
+
+        let color = this.colors.graphAccent;
+        let width = primaryBidir ? 3 : 1.5;
+        let alpha = linkLodOpacity(link);
+
+        if (selectionActive && highlightType === 'none') alpha = 0.2;
+
+        if (highlightType === 'out') {
+          color = this.colors.graphOut;
+          width = 2.5;
+          alpha = 1;
+        } else if (highlightType === 'in') {
+          color = this.colors.graphIn;
+          width = 2.5;
+          alpha = 1;
+        } else if (highlightType === 'bidir') {
+          color = this.colors.graphAccent;
+          width = 4;
+          alpha = 1;
+        } else if (hover) {
+          color = this.colors.graphHover;
+          width = 2.5;
+          alpha = 1;
+        }
+
+        view.graphics.visible = true;
+        view.graphics.clear();
+        view.graphics.lineStyle({
+          width,
+          color,
+          alpha,
+          cap: PIXI.LINE_CAP.ROUND,
+          join: PIXI.LINE_JOIN.ROUND,
+        });
+        view.graphics.moveTo(geometry.sx, geometry.sy);
+        if (geometry.curved) {
+          view.graphics.quadraticCurveTo(geometry.cpx, geometry.cpy, geometry.ex, geometry.ey);
+        } else {
+          view.graphics.lineTo(geometry.ex, geometry.ey);
+        }
+        drawArrowHead(
+          view.graphics,
+          geometry.arrowFromX,
+          geometry.arrowFromY,
+          geometry.ex,
+          geometry.ey,
+          width,
+          color,
+          alpha
+        );
+        if (primaryBidir && !split) {
+          drawArrowHead(view.graphics, geometry.ex, geometry.ey, geometry.sx, geometry.sy, width, color, alpha);
+        }
+
+        const labelHighlighted = selectedNodeId !== null
+          && (getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId);
+        const labelVisible = Boolean(link.label)
+          && (!options.biDirSecondarySet.has(link.id) || secondaryVisible)
+          && (!options.lightweightMode || (selectedNodeId !== null && labelHighlighted));
+
+        view.label.visible = labelVisible;
+        if (!labelVisible) return;
+
+        const midpoint = getLabelMidpoint(link);
+        view.label.text = link.label;
+        view.label.position.set(midpoint.x, midpoint.y);
+        view.label.style.fill = highlightType === 'out'
+          ? this.colors.graphOut
+          : highlightType === 'in'
+            ? this.colors.graphIn
+            : this.colors.graphAccent;
+        view.label.alpha = labelHighlighted
+          ? 1
+          : selectionActive
+            ? 0.15
+            : linkLodOpacity(link);
+      });
+
+      nodes.forEach(node => {
+        const view = this.nodeViews.get(node.id);
+        if (!view) return;
+
+        const selected = node.id === selectedNodeId;
+        const connected = connectedIds.has(node.id);
+        const searchMatch = searchMatchSet.has(node.id);
+        const hovered = hoveredNodeId === node.id
+          || arrowDragSourceId === node.id
+          || arrowDragTargetId === node.id;
+        const baseLod = calcLodOpacity(node.r);
+        const selectionLod = selectionActive && !selected && !connected && !searchMatch ? 0.18 : 1;
+        const alpha = baseLod * selectionLod;
+
+        view.root.visible = true;
+        view.root.position.set(node.x ?? 0, node.y ?? 0);
+
+        drawOccluderCircle(view.occluder, node.r + 2, this.colors.mapBg);
+
+        view.backdrop.clear();
+        view.backdrop.beginFill(this.colors.blankNodeFill, alpha);
+        view.backdrop.drawCircle(0, 0, node.r);
+        view.backdrop.endFill();
+
+        view.mask.clear();
+        view.mask.beginFill(this.colors.white, 1);
+        view.mask.drawCircle(0, 0, node.r);
+        view.mask.endFill();
+
+        const iconSrc = node.dataUrl || '';
+        if (view.iconSrc !== iconSrc) {
+          view.sprite.texture = iconSrc ? PIXI.Texture.from(iconSrc) : PIXI.Texture.EMPTY;
+          view.iconSrc = iconSrc;
+        }
+
+        view.sprite.visible = Boolean(iconSrc);
+        view.sprite.width = node.r * 2;
+        view.sprite.height = node.r * 2;
+        view.sprite.alpha = alpha;
+
+        let ringColor = this.colors.graphAccent;
+        let ringWidth = 2.5;
+        if (connected) {
+          ringColor = this.colors.nodeConnected;
+          ringWidth = 3.5;
+        }
+        if (searchMatch) {
+          ringColor = this.colors.nodeSearch;
+          ringWidth = Math.max(ringWidth, 3);
+        }
+        if (selected || hovered) {
+          ringColor = this.colors.nodeHover;
+          ringWidth = 3.5;
+        }
+
+        view.ring.clear();
+        view.ring.lineStyle({
+          width: ringWidth,
+          color: ringColor,
+          alpha,
+          cap: PIXI.LINE_CAP.ROUND,
+          join: PIXI.LINE_JOIN.ROUND,
+        });
+        view.ring.drawCircle(0, 0, node.r);
+
+        view.label.text = node.name;
+        view.label.position.set(0, node.r + 20);
+        view.label.alpha = alpha;
+      });
+
+      this.updateCanvasCursor();
+    }
+
+    emitViewTransformChange(transform) {
+      const nextTransform = {
+        x: Number.isFinite(transform?.x) ? transform.x : this.viewTransform.x,
+        y: Number.isFinite(transform?.y) ? transform.y : this.viewTransform.y,
+        k: clamp(Number.isFinite(transform?.k) ? transform.k : this.viewTransform.k, MIN_SCALE, MAX_SCALE),
+      };
+      this.setViewTransform(nextTransform);
+      this.interactionHandlers.onViewTransformChange?.(nextTransform);
+    }
+
+    getPointerDataFromClient(clientX, clientY) {
+      const rect = this.canvas.getBoundingClientRect();
+      const screenX = clientX - rect.left;
+      const screenY = clientY - rect.top;
+      return {
+        clientX,
+        clientY,
+        screenX,
+        screenY,
+        worldX: (screenX - this.viewTransform.x) / this.viewTransform.k,
+        worldY: (screenY - this.viewTransform.y) / this.viewTransform.k,
+        rect,
+      };
+    }
+
+    getPointerData(nativeEvent) {
+      return this.getPointerDataFromClient(nativeEvent.clientX, nativeEvent.clientY);
+    }
+
+    isPointerInsideCanvas(pointerData) {
+      return pointerData.screenX >= 0
+        && pointerData.screenY >= 0
+        && pointerData.screenX <= pointerData.rect.width
+        && pointerData.screenY <= pointerData.rect.height;
+    }
+
+    buildSyntheticPointerEvent(nativeEvent, pointerData) {
+      return {
+        clientX: pointerData.clientX,
+        clientY: pointerData.clientY,
+        x: pointerData.worldX,
+        y: pointerData.worldY,
+        button: nativeEvent.button,
+        pointerType: nativeEvent.pointerType,
+        preventDefault: () => nativeEvent.preventDefault(),
+        stopPropagation: () => nativeEvent.stopPropagation(),
+        sourceEvent: nativeEvent,
+      };
+    }
+
+    invokeInteractionHandler(name, subject, nativeEvent, pointerData) {
+      const handler = this.interactionHandlers[name];
+      if (typeof handler !== 'function') return;
+      handler(this.buildSyntheticPointerEvent(nativeEvent, pointerData), subject);
+    }
+
+    findNodeAtPointer(pointerData) {
+      const nodes = this.sceneState?.nodes ?? [];
+      for (let index = nodes.length - 1; index >= 0; index -= 1) {
+        const node = nodes[index];
+        const dx = (node.x ?? 0) - pointerData.worldX;
+        const dy = (node.y ?? 0) - pointerData.worldY;
+        if (Math.hypot(dx, dy) <= node.r + 10) return node;
+      }
+      return null;
+    }
+
+    findLinkAtPointer(pointerData) {
+      const links = this.sceneState?.links ?? [];
+      const threshold = (LINK_HIT_WIDTH * 0.5) / this.viewTransform.k;
+      for (let index = links.length - 1; index >= 0; index -= 1) {
+        const link = links[index];
+        const view = this.linkViews.get(link.id);
+        if (!view?.visibleForHit || !view.lastGeometry) continue;
+        const distance = view.lastGeometry.curved
+          ? distancePointToQuadratic(
+              pointerData.worldX,
+              pointerData.worldY,
+              view.lastGeometry.sx,
+              view.lastGeometry.sy,
+              view.lastGeometry.cpx,
+              view.lastGeometry.cpy,
+              view.lastGeometry.ex,
+              view.lastGeometry.ey
+            )
+          : distancePointToSegment(
+              pointerData.worldX,
+              pointerData.worldY,
+              view.lastGeometry.sx,
+              view.lastGeometry.sy,
+              view.lastGeometry.ex,
+              view.lastGeometry.ey
+            );
+        if (distance <= threshold) return link;
+      }
+      return null;
+    }
+
+    hitTestPointer(pointerData) {
+      if (!this.sceneState || !this.isPointerInsideCanvas(pointerData)) return null;
+      const node = this.findNodeAtPointer(pointerData);
+      if (node) return { type: 'node', node };
+      const link = this.findLinkAtPointer(pointerData);
+      if (link) return { type: 'link', link };
+      return null;
+    }
+
+    clearHoverTarget() {
+      if (!this.hoverTarget) {
+        this.updateCanvasCursor();
+        return;
+      }
+
+      const previous = this.hoverTarget;
+      this.hoverTarget = null;
+
+      if (previous.type === 'node') {
+        this.interactionHandlers.onNodePointerLeave?.();
+      } else if (previous.type === 'link') {
+        this.interactionHandlers.onLinkPointerLeave?.();
+      }
+
+      this.updateCanvasCursor();
+    }
+
+    updateHoverFromPointer(pointerData, nativeEvent) {
+      const hit = this.hitTestPointer(pointerData);
+
+      if (hit?.type === 'node') {
+        if (this.hoverTarget?.type === 'node' && this.hoverTarget.id === hit.node.id) {
+          this.invokeInteractionHandler('onNodePointerMove', hit.node, nativeEvent, pointerData);
+          this.updateCanvasCursor();
+          return;
+        }
+
+        this.clearHoverTarget();
+        this.hoverTarget = { type: 'node', id: hit.node.id };
+        this.invokeInteractionHandler('onNodePointerEnter', hit.node, nativeEvent, pointerData);
+        this.updateCanvasCursor();
+        return;
+      }
+
+      if (hit?.type === 'link') {
+        if (this.hoverTarget?.type === 'link' && this.hoverTarget.id === hit.link.id) {
+          this.invokeInteractionHandler('onLinkPointerMove', hit.link, nativeEvent, pointerData);
+          this.updateCanvasCursor();
+          return;
+        }
+
+        this.clearHoverTarget();
+        this.hoverTarget = { type: 'link', id: hit.link.id };
+        this.invokeInteractionHandler('onLinkPointerEnter', hit.link, nativeEvent, pointerData);
+        this.updateCanvasCursor();
+        return;
+      }
+
+      this.clearHoverTarget();
+    }
+
+    updateCanvasCursor() {
+      if (!this.canvas) return;
+      if (this.pointerSession?.draggingLink) {
+        this.canvas.style.cursor = 'crosshair';
+        return;
+      }
+      if (this.pointerSession?.panning) {
+        this.canvas.style.cursor = 'grabbing';
+        return;
+      }
+      if (this.hoverTarget) {
+        this.canvas.style.cursor = 'pointer';
+        return;
+      }
+      this.canvas.style.cursor = this.sceneState ? 'grab' : 'default';
+    }
+
+    clearPointerSession() {
+      this.pointerSession = null;
+      window.removeEventListener('pointermove', this.handleWindowPointerMove);
+      window.removeEventListener('pointerup', this.handleWindowPointerUp);
+      window.removeEventListener('pointercancel', this.handleWindowPointerUp);
+      this.updateCanvasCursor();
+    }
+
+    handleCanvasPointerDown(nativeEvent) {
+      if (!this.sceneState) return;
+      const isPrimaryButton = nativeEvent.button === 0 || nativeEvent.pointerType === 'touch' || nativeEvent.pointerType === 'pen';
+      if (!isPrimaryButton) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const hit = this.hitTestPointer(pointerData);
+
+      if (!hit) {
+        this.clearHoverTarget();
+      }
+
+      this.clearPointerSession();
+      this.pointerSession = {
+        pointerId: nativeEvent.pointerId,
+        type: hit?.type ?? 'background',
+        node: hit?.node ?? null,
+        link: hit?.link ?? null,
+        startClientX: nativeEvent.clientX,
+        startClientY: nativeEvent.clientY,
+        startTransform: { ...this.viewTransform },
+        draggingLink: false,
+        moved: false,
+        panning: false,
+      };
+
+      window.addEventListener('pointermove', this.handleWindowPointerMove);
+      window.addEventListener('pointerup', this.handleWindowPointerUp);
+      window.addEventListener('pointercancel', this.handleWindowPointerUp);
+      nativeEvent.preventDefault();
+      this.updateCanvasCursor();
+    }
+
+    handleCanvasPointerMove(nativeEvent) {
+      if (this.pointerSession) return;
+      this.updateHoverFromPointer(this.getPointerData(nativeEvent), nativeEvent);
+    }
+
+    handleCanvasPointerLeave() {
+      if (this.pointerSession) return;
+      this.clearHoverTarget();
+    }
+
+    handleWindowPointerMove(nativeEvent) {
+      const session = this.pointerSession;
+      if (!session || nativeEvent.pointerId !== session.pointerId) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const moveX = nativeEvent.clientX - session.startClientX;
+      const moveY = nativeEvent.clientY - session.startClientY;
+      const movedDistance = Math.hypot(moveX, moveY);
+
+      if (session.type === 'node') {
+        if (!session.draggingLink && movedDistance >= POINTER_DRAG_THRESHOLD) {
+          session.draggingLink = true;
+          this.clearHoverTarget();
+          this.invokeInteractionHandler('onArrowDragStart', session.node, nativeEvent, pointerData);
+        }
+        if (session.draggingLink) {
+          this.invokeInteractionHandler('onArrowDragMove', session.node, nativeEvent, pointerData);
+        }
+        this.updateCanvasCursor();
+        return;
+      }
+
+      if (session.type === 'background') {
+        if (!session.panning && movedDistance >= POINTER_DRAG_THRESHOLD) {
+          session.panning = true;
+        }
+        if (session.panning) {
+          this.emitViewTransformChange({
+            x: session.startTransform.x + moveX,
+            y: session.startTransform.y + moveY,
+            k: session.startTransform.k,
+          });
+        }
+        this.updateCanvasCursor();
+        return;
+      }
+
+      if (session.type === 'link') {
+        if (!session.panning && movedDistance >= POINTER_DRAG_THRESHOLD) {
+          session.panning = true;
+          session.moved = true;
+          this.clearHoverTarget();
+        }
+        if (session.panning) {
+          this.emitViewTransformChange({
+            x: session.startTransform.x + moveX,
+            y: session.startTransform.y + moveY,
+            k: session.startTransform.k,
+          });
+        }
+        this.updateCanvasCursor();
+      }
+    }
+
+    handleWindowPointerUp(nativeEvent) {
+      const session = this.pointerSession;
+      if (!session || nativeEvent.pointerId !== session.pointerId) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const hit = this.hitTestPointer(pointerData);
+
+      if (session.type === 'node') {
+        if (session.draggingLink) {
+          this.invokeInteractionHandler('onArrowDragEnd', session.node, nativeEvent, pointerData);
+        } else if (hit?.type === 'node' && hit.node.id === session.node?.id) {
+          this.invokeInteractionHandler('onNodeClick', session.node, nativeEvent, pointerData);
+        }
+      } else if (session.type === 'link') {
+        if (!session.moved && hit?.type === 'link' && hit.link.id === session.link?.id) {
+          this.invokeInteractionHandler('onLinkClick', session.link, nativeEvent, pointerData);
+        }
+      } else if (!session.panning) {
+        this.interactionHandlers.onBackgroundClick?.();
+      }
+
+      this.clearPointerSession();
+      if (this.isPointerInsideCanvas(pointerData)) {
+        this.updateHoverFromPointer(pointerData, nativeEvent);
+      } else {
+        this.clearHoverTarget();
+      }
+    }
+
+    handleCanvasContextMenu(nativeEvent) {
+      if (!this.sceneState) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const hit = this.hitTestPointer(pointerData);
+      nativeEvent.preventDefault();
+
+      if (hit?.type === 'node') {
+        this.invokeInteractionHandler('onNodeContextMenu', hit.node, nativeEvent, pointerData);
+        return;
+      }
+
+      if (hit?.type === 'link') {
+        this.invokeInteractionHandler('onLinkContextMenu', hit.link, nativeEvent, pointerData);
+        return;
+      }
+
+      this.interactionHandlers.onBackgroundContextMenu?.();
+    }
+
+    handleWheel(nativeEvent) {
+      if (!this.sceneState) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      if (!this.isPointerInsideCanvas(pointerData)) return;
+
+      nativeEvent.preventDefault();
+
+      const speed = nativeEvent.deltaMode === 1 ? 0.08 : 0.0015;
+      const nextScale = clamp(this.viewTransform.k * Math.exp(-nativeEvent.deltaY * speed), MIN_SCALE, MAX_SCALE);
+      if (nextScale === this.viewTransform.k) return;
+
+      this.emitViewTransformChange({
+        x: pointerData.screenX - pointerData.worldX * nextScale,
+        y: pointerData.screenY - pointerData.worldY * nextScale,
+        k: nextScale,
+      });
+    }
+  }
+
+  window.PixiGraphRenderer = PixiGraphRenderer;
+})();
