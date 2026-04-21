@@ -124,6 +124,8 @@
       this.viewTransform = { x: 0, y: 0, k: 1 };
       this.hoverTarget = null;
       this.pointerSession = null;
+      this.touchPoints = new Map();
+      this.pinchSession = null;
 
       if (!window.PIXI || !this.container) return;
 
@@ -713,6 +715,10 @@
 
     updateCanvasCursor() {
       if (!this.canvas) return;
+      if (this.pinchSession) {
+        this.canvas.style.cursor = 'grabbing';
+        return;
+      }
       if (this.pointerSession?.draggingLink) {
         this.canvas.style.cursor = 'crosshair';
         return;
@@ -728,11 +734,107 @@
       this.canvas.style.cursor = this.sceneState ? 'grab' : 'default';
     }
 
-    clearPointerSession() {
-      this.pointerSession = null;
+    attachGlobalPointerListeners() {
+      window.addEventListener('pointermove', this.handleWindowPointerMove);
+      window.addEventListener('pointerup', this.handleWindowPointerUp);
+      window.addEventListener('pointercancel', this.handleWindowPointerUp);
+    }
+
+    releaseGlobalPointerListenersIfIdle() {
+      if (this.pointerSession || this.pinchSession || this.touchPoints.size > 0) return;
       window.removeEventListener('pointermove', this.handleWindowPointerMove);
       window.removeEventListener('pointerup', this.handleWindowPointerUp);
       window.removeEventListener('pointercancel', this.handleWindowPointerUp);
+    }
+
+    clearPointerSession({ cancelArrowDrag = false } = {}) {
+      if (cancelArrowDrag && this.pointerSession?.draggingLink) {
+        this.interactionHandlers.onArrowDragCancel?.();
+      }
+      this.pointerSession = null;
+      this.releaseGlobalPointerListenersIfIdle();
+      this.updateCanvasCursor();
+    }
+
+    updateTouchPoint(nativeEvent) {
+      this.touchPoints.set(nativeEvent.pointerId, {
+        pointerId: nativeEvent.pointerId,
+        clientX: nativeEvent.clientX,
+        clientY: nativeEvent.clientY,
+      });
+    }
+
+    removeTouchPoint(pointerId) {
+      this.touchPoints.delete(pointerId);
+    }
+
+    getTouchPair() {
+      const points = Array.from(this.touchPoints.values());
+      if (points.length < 2) return null;
+      return [points[0], points[1]];
+    }
+
+    getTouchDistance(pointA, pointB) {
+      return Math.hypot(pointB.clientX - pointA.clientX, pointB.clientY - pointA.clientY) || 1;
+    }
+
+    getTouchMidpoint(pointA, pointB) {
+      return {
+        clientX: (pointA.clientX + pointB.clientX) / 2,
+        clientY: (pointA.clientY + pointB.clientY) / 2,
+      };
+    }
+
+    startPinchSession() {
+      const pair = this.getTouchPair();
+      if (!pair) return;
+
+      const [pointA, pointB] = pair;
+      const midpoint = this.getTouchMidpoint(pointA, pointB);
+      const midpointData = this.getPointerDataFromClient(midpoint.clientX, midpoint.clientY);
+
+      this.clearPointerSession({ cancelArrowDrag: true });
+      this.clearHoverTarget();
+      this.pinchSession = {
+        pointerIds: [pointA.pointerId, pointB.pointerId],
+        startDistance: this.getTouchDistance(pointA, pointB),
+        startTransform: { ...this.viewTransform },
+        startWorldMidpoint: {
+          x: midpointData.worldX,
+          y: midpointData.worldY,
+        },
+      };
+      this.updateCanvasCursor();
+    }
+
+    updatePinchSession() {
+      if (!this.pinchSession) return;
+
+      const activePoints = this.pinchSession.pointerIds
+        .map(pointerId => this.touchPoints.get(pointerId))
+        .filter(Boolean);
+
+      if (activePoints.length < 2) {
+        this.clearPinchSession();
+        return;
+      }
+
+      const [pointA, pointB] = activePoints;
+      const midpoint = this.getTouchMidpoint(pointA, pointB);
+      const midpointData = this.getPointerDataFromClient(midpoint.clientX, midpoint.clientY);
+      const scaleRatio = this.getTouchDistance(pointA, pointB) / this.pinchSession.startDistance;
+      const nextScale = clamp(this.pinchSession.startTransform.k * scaleRatio, MIN_SCALE, MAX_SCALE);
+
+      this.emitViewTransformChange({
+        x: midpointData.screenX - this.pinchSession.startWorldMidpoint.x * nextScale,
+        y: midpointData.screenY - this.pinchSession.startWorldMidpoint.y * nextScale,
+        k: nextScale,
+      });
+    }
+
+    clearPinchSession() {
+      this.pinchSession = null;
+      this.releaseGlobalPointerListenersIfIdle();
       this.updateCanvasCursor();
     }
 
@@ -743,6 +845,16 @@
 
       const pointerData = this.getPointerData(nativeEvent);
       const hit = this.hitTestPointer(pointerData);
+
+      if (nativeEvent.pointerType === 'touch') {
+        this.updateTouchPoint(nativeEvent);
+        this.attachGlobalPointerListeners();
+        if (this.touchPoints.size >= 2) {
+          this.startPinchSession();
+          nativeEvent.preventDefault();
+          return;
+        }
+      }
 
       if (!hit) {
         this.clearHoverTarget();
@@ -762,24 +874,44 @@
         panning: false,
       };
 
-      window.addEventListener('pointermove', this.handleWindowPointerMove);
-      window.addEventListener('pointerup', this.handleWindowPointerUp);
-      window.addEventListener('pointercancel', this.handleWindowPointerUp);
+      this.attachGlobalPointerListeners();
       nativeEvent.preventDefault();
       this.updateCanvasCursor();
     }
 
     handleCanvasPointerMove(nativeEvent) {
+      if (nativeEvent.pointerType === 'touch' && this.touchPoints.has(nativeEvent.pointerId)) {
+        this.updateTouchPoint(nativeEvent);
+      }
+
+      if (this.pinchSession) {
+        this.updatePinchSession();
+        nativeEvent.preventDefault();
+        return;
+      }
+
       if (this.pointerSession) return;
+      if (nativeEvent.pointerType === 'touch') return;
       this.updateHoverFromPointer(this.getPointerData(nativeEvent), nativeEvent);
     }
 
-    handleCanvasPointerLeave() {
-      if (this.pointerSession) return;
+    handleCanvasPointerLeave(nativeEvent) {
+      if (nativeEvent?.pointerType === 'touch') return;
+      if (this.pointerSession || this.pinchSession) return;
       this.clearHoverTarget();
     }
 
     handleWindowPointerMove(nativeEvent) {
+      if (nativeEvent.pointerType === 'touch' && this.touchPoints.has(nativeEvent.pointerId)) {
+        this.updateTouchPoint(nativeEvent);
+      }
+
+      if (this.pinchSession) {
+        this.updatePinchSession();
+        nativeEvent.preventDefault();
+        return;
+      }
+
       const session = this.pointerSession;
       if (!session || nativeEvent.pointerId !== session.pointerId) return;
 
@@ -834,6 +966,19 @@
     }
 
     handleWindowPointerUp(nativeEvent) {
+      if (nativeEvent.pointerType === 'touch') {
+        this.removeTouchPoint(nativeEvent.pointerId);
+        if (this.pinchSession) {
+          if (this.touchPoints.size >= 2) {
+            this.startPinchSession();
+          } else {
+            this.clearPinchSession();
+          }
+          nativeEvent.preventDefault();
+          return;
+        }
+      }
+
       const session = this.pointerSession;
       if (!session || nativeEvent.pointerId !== session.pointerId) return;
 

@@ -1459,6 +1459,21 @@ function onArrowDragEnd(event) {
   }
 }
 
+function onArrowDragCancel() {
+  if (usePixiRenderer) {
+    pixiRenderer.setDragLine({ visible: false, x1: 0, y1: 0, x2: 0, y2: 0 });
+  } else {
+    dragLine.attr('visibility', 'hidden');
+  }
+
+  const hadArrowDragState = arrowSrc !== null || arrowDragTargetId !== null;
+  arrowSrc = null;
+  arrowDragTargetId = null;
+  if (hadArrowDragState) {
+    renderVisibleGraph();
+  }
+}
+
 function onNodeClick(event, node) {
   event.stopPropagation();
   hideContextMenu();
@@ -1541,6 +1556,7 @@ function onPixiViewTransformChange(transform) {
 
 if (usePixiRenderer) {
   pixiRenderer.setInteractionHandlers({
+    onArrowDragCancel,
     onArrowDragEnd,
     onArrowDragMove,
     onArrowDragStart,
