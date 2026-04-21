@@ -1400,6 +1400,18 @@ document.getElementById('btn-relayout').addEventListener('click', () => {
   restart({ layout: true, fit: true, seed: true });
 });
 
+// ---- 軽量モード ----
+(function initLightweightMode() {
+  const chk = document.getElementById('chk-lightweight');
+  const enabled = localStorage.getItem('lightweightMode') === '1';
+  chk.checked = enabled;
+  document.body.classList.toggle('lightweight-mode', enabled);
+  chk.addEventListener('change', () => {
+    document.body.classList.toggle('lightweight-mode', chk.checked);
+    localStorage.setItem('lightweightMode', chk.checked ? '1' : '0');
+  });
+})();
+
 document.getElementById('btn-save').addEventListener('click', () => {
   const data = {
     nodes: nodes.map(node => ({ id: node.id, name: node.name, dataUrl: node.dataUrl })),
