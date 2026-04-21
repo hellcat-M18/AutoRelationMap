@@ -1,4 +1,9 @@
 (function () {
+  const MIN_SCALE = 0.1;
+  const MAX_SCALE = 5;
+  const POINTER_DRAG_THRESHOLD = 6;
+  const LINK_HIT_WIDTH = 16;
+
   function parseCssColor(value, fallback) {
     if (!value) return fallback;
     const text = String(value).trim();
@@ -39,6 +44,21 @@
     return typeof style.clone === 'function' ? style.clone() : new PIXI.TextStyle(style);
   }
 
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function distancePointToSegment(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared === 0) return Math.hypot(px - ax, py - ay);
+    const t = clamp(((px - ax) * dx + (py - ay) * dy) / lengthSquared, 0, 1);
+    const closestX = ax + dx * t;
+    const closestY = ay + dy * t;
+    return Math.hypot(px - closestX, py - closestY);
+  }
+
   function drawArrowHead(graphics, fromX, fromY, toX, toY, width, color, alpha) {
     const dx = toX - fromX;
     const dy = toY - fromY;
@@ -68,6 +88,11 @@
       this.nodeViews = new Map();
       this.linkViews = new Map();
       this.colors = getThemeColors();
+      this.sceneState = null;
+      this.interactionHandlers = {};
+      this.viewTransform = { x: 0, y: 0, k: 1 };
+      this.hoverTarget = null;
+      this.pointerSession = null;
 
       if (!window.PIXI || !this.container) return;
 
@@ -87,7 +112,6 @@
 
       this.canvas = this.app.view;
       this.canvas.id = 'pixi-layer';
-      this.canvas.setAttribute('aria-hidden', 'true');
 
       if (this.overlay?.parentNode === this.container) {
         this.container.insertBefore(this.canvas, this.overlay);
@@ -125,7 +149,29 @@
         lineJoin: 'round',
       });
 
+      this.handleCanvasPointerDown = this.handleCanvasPointerDown.bind(this);
+      this.handleCanvasPointerMove = this.handleCanvasPointerMove.bind(this);
+      this.handleCanvasPointerLeave = this.handleCanvasPointerLeave.bind(this);
+      this.handleCanvasContextMenu = this.handleCanvasContextMenu.bind(this);
+      this.handleWheel = this.handleWheel.bind(this);
+      this.handleWindowPointerMove = this.handleWindowPointerMove.bind(this);
+      this.handleWindowPointerUp = this.handleWindowPointerUp.bind(this);
+
+      this.installInteractionListeners();
       this.enabled = true;
+      this.updateCanvasCursor();
+    }
+
+    installInteractionListeners() {
+      this.canvas.addEventListener('pointerdown', this.handleCanvasPointerDown);
+      this.canvas.addEventListener('pointermove', this.handleCanvasPointerMove);
+      this.canvas.addEventListener('pointerleave', this.handleCanvasPointerLeave);
+      this.canvas.addEventListener('contextmenu', this.handleCanvasContextMenu);
+      this.canvas.addEventListener('wheel', this.handleWheel, { passive: false });
+    }
+
+    setInteractionHandlers(handlers) {
+      this.interactionHandlers = handlers ?? {};
     }
 
     resize(width, height) {
@@ -135,8 +181,13 @@
 
     setViewTransform(transform) {
       if (!this.enabled) return;
-      this.world.position.set(transform.x, transform.y);
-      this.world.scale.set(transform.k, transform.k);
+      this.viewTransform = {
+        x: Number.isFinite(transform?.x) ? transform.x : 0,
+        y: Number.isFinite(transform?.y) ? transform.y : 0,
+        k: clamp(Number.isFinite(transform?.k) ? transform.k : 1, MIN_SCALE, MAX_SCALE),
+      };
+      this.world.position.set(this.viewTransform.x, this.viewTransform.y);
+      this.world.scale.set(this.viewTransform.k, this.viewTransform.k);
     }
 
     setDragLine({ visible, x1, y1, x2, y2 }) {
@@ -194,7 +245,6 @@
 
       sprite.anchor.set(0.5, 0.5);
       sprite.mask = mask;
-
       label.anchor.set(0.5, 0);
 
       root.addChild(backdrop, sprite, ring, label, mask);
@@ -217,7 +267,53 @@
       label.anchor.set(0.5, 0.5);
       this.linkLayer.addChild(graphics);
       this.labelLayer.addChild(label);
-      return { graphics, label };
+      return {
+        graphics,
+        label,
+        lastGeometry: null,
+        visibleForHit: false,
+      };
+    }
+
+    getLinkVisualState(link, state = this.sceneState) {
+      if (!state) {
+        return { highlightType: 'none', primaryBidir: false, secondaryVisible: false, split: false, visible: false };
+      }
+
+      const {
+        selectedNodeId,
+        biDirPrimarySet,
+        biDirSecondarySet,
+        getLinkSourceId,
+        getLinkTargetId,
+        isBidirSplit,
+        lightweightMode,
+      } = state;
+
+      const secondary = biDirSecondarySet.has(link.id);
+      const split = isBidirSplit(link);
+      const secondaryVisible = secondary && split;
+      const primaryBidir = biDirPrimarySet.has(link.id);
+
+      let highlightType = 'none';
+      if (selectedNodeId !== null) {
+        if (primaryBidir && !split) {
+          if (getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId) {
+            highlightType = 'bidir';
+          }
+        } else if (getLinkSourceId(link) === selectedNodeId) {
+          highlightType = 'out';
+        } else if (getLinkTargetId(link) === selectedNodeId) {
+          highlightType = 'in';
+        }
+      }
+
+      const baseVisible = !secondary || secondaryVisible;
+      const visible = lightweightMode
+        ? baseVisible && selectedNodeId !== null && highlightType !== 'none'
+        : baseVisible;
+
+      return { highlightType, primaryBidir, secondaryVisible, split, visible };
     }
 
     renderScene(options) {
@@ -228,20 +324,17 @@
         links,
         selectedNodeId,
         searchMatchSet,
-        biDirPrimarySet,
-        biDirSecondarySet,
         computeLinkGeometry,
         getLabelMidpoint,
         getLinkSourceId,
         getLinkTargetId,
-        isBidirSplit,
         calcLodOpacity,
         linkLodOpacity,
         hoveredNodeId,
         hoveredLinkId,
-        lightweightMode,
       } = options;
 
+      this.sceneState = options;
       this.colors = getThemeColors();
       this.syncGraphElements({ nodes, links });
 
@@ -262,31 +355,13 @@
         if (!view) return;
 
         const geometry = computeLinkGeometry(link);
-        const secondary = biDirSecondarySet.has(link.id);
-        const split = isBidirSplit(link);
-        const secondaryVisible = secondary && split;
-        const primaryBidir = biDirPrimarySet.has(link.id);
-
-        let highlightType = 'none';
-        if (selectedNodeId !== null) {
-          if (primaryBidir && !split) {
-            if (getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId) {
-              highlightType = 'bidir';
-            }
-          } else if (getLinkSourceId(link) === selectedNodeId) {
-            highlightType = 'out';
-          } else if (getLinkTargetId(link) === selectedNodeId) {
-            highlightType = 'in';
-          }
-        }
-
+        const { highlightType, primaryBidir, secondaryVisible, split, visible } = this.getLinkVisualState(link, options);
         const hover = hoveredLinkId === link.id;
-        const baseVisible = !secondary || secondaryVisible;
-        const visible = lightweightMode
-          ? baseVisible && selectedNodeId !== null && highlightType !== 'none'
-          : baseVisible;
 
-        if (!view || !geometry || !visible) {
+        view.lastGeometry = geometry;
+        view.visibleForHit = Boolean(geometry && visible);
+
+        if (!geometry || !visible) {
           view.graphics.visible = false;
           view.label.visible = false;
           return;
@@ -335,8 +410,8 @@
         const labelHighlighted = selectedNodeId !== null
           && (getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId);
         const labelVisible = Boolean(link.label)
-          && (!secondary || secondaryVisible)
-          && (!lightweightMode || (selectedNodeId !== null && labelHighlighted));
+          && (!options.biDirSecondarySet.has(link.id) || secondaryVisible)
+          && (!options.lightweightMode || (selectedNodeId !== null && labelHighlighted));
 
         view.label.visible = labelVisible;
         if (!labelVisible) return;
@@ -420,6 +495,334 @@
         view.label.text = node.name;
         view.label.position.set(0, node.r + 20);
         view.label.alpha = alpha;
+      });
+
+      this.updateCanvasCursor();
+    }
+
+    emitViewTransformChange(transform) {
+      const nextTransform = {
+        x: Number.isFinite(transform?.x) ? transform.x : this.viewTransform.x,
+        y: Number.isFinite(transform?.y) ? transform.y : this.viewTransform.y,
+        k: clamp(Number.isFinite(transform?.k) ? transform.k : this.viewTransform.k, MIN_SCALE, MAX_SCALE),
+      };
+      this.setViewTransform(nextTransform);
+      this.interactionHandlers.onViewTransformChange?.(nextTransform);
+    }
+
+    getPointerDataFromClient(clientX, clientY) {
+      const rect = this.canvas.getBoundingClientRect();
+      const screenX = clientX - rect.left;
+      const screenY = clientY - rect.top;
+      return {
+        clientX,
+        clientY,
+        screenX,
+        screenY,
+        worldX: (screenX - this.viewTransform.x) / this.viewTransform.k,
+        worldY: (screenY - this.viewTransform.y) / this.viewTransform.k,
+        rect,
+      };
+    }
+
+    getPointerData(nativeEvent) {
+      return this.getPointerDataFromClient(nativeEvent.clientX, nativeEvent.clientY);
+    }
+
+    isPointerInsideCanvas(pointerData) {
+      return pointerData.screenX >= 0
+        && pointerData.screenY >= 0
+        && pointerData.screenX <= pointerData.rect.width
+        && pointerData.screenY <= pointerData.rect.height;
+    }
+
+    buildSyntheticPointerEvent(nativeEvent, pointerData) {
+      return {
+        clientX: pointerData.clientX,
+        clientY: pointerData.clientY,
+        x: pointerData.worldX,
+        y: pointerData.worldY,
+        button: nativeEvent.button,
+        pointerType: nativeEvent.pointerType,
+        preventDefault: () => nativeEvent.preventDefault(),
+        stopPropagation: () => nativeEvent.stopPropagation(),
+        sourceEvent: nativeEvent,
+      };
+    }
+
+    invokeInteractionHandler(name, subject, nativeEvent, pointerData) {
+      const handler = this.interactionHandlers[name];
+      if (typeof handler !== 'function') return;
+      handler(this.buildSyntheticPointerEvent(nativeEvent, pointerData), subject);
+    }
+
+    findNodeAtPointer(pointerData) {
+      const nodes = this.sceneState?.nodes ?? [];
+      for (let index = nodes.length - 1; index >= 0; index -= 1) {
+        const node = nodes[index];
+        const dx = (node.x ?? 0) - pointerData.worldX;
+        const dy = (node.y ?? 0) - pointerData.worldY;
+        if (Math.hypot(dx, dy) <= node.r + 10) return node;
+      }
+      return null;
+    }
+
+    findLinkAtPointer(pointerData) {
+      const links = this.sceneState?.links ?? [];
+      const threshold = (LINK_HIT_WIDTH * 0.5) / this.viewTransform.k;
+      for (let index = links.length - 1; index >= 0; index -= 1) {
+        const link = links[index];
+        const view = this.linkViews.get(link.id);
+        if (!view?.visibleForHit || !view.lastGeometry) continue;
+        const distance = distancePointToSegment(
+          pointerData.worldX,
+          pointerData.worldY,
+          view.lastGeometry.sx,
+          view.lastGeometry.sy,
+          view.lastGeometry.ex,
+          view.lastGeometry.ey
+        );
+        if (distance <= threshold) return link;
+      }
+      return null;
+    }
+
+    hitTestPointer(pointerData) {
+      if (!this.sceneState || !this.isPointerInsideCanvas(pointerData)) return null;
+      const node = this.findNodeAtPointer(pointerData);
+      if (node) return { type: 'node', node };
+      const link = this.findLinkAtPointer(pointerData);
+      if (link) return { type: 'link', link };
+      return null;
+    }
+
+    clearHoverTarget() {
+      if (!this.hoverTarget) {
+        this.updateCanvasCursor();
+        return;
+      }
+
+      const previous = this.hoverTarget;
+      this.hoverTarget = null;
+
+      if (previous.type === 'node') {
+        this.interactionHandlers.onNodePointerLeave?.();
+      } else if (previous.type === 'link') {
+        this.interactionHandlers.onLinkPointerLeave?.();
+      }
+
+      this.updateCanvasCursor();
+    }
+
+    updateHoverFromPointer(pointerData, nativeEvent) {
+      const hit = this.hitTestPointer(pointerData);
+
+      if (hit?.type === 'node') {
+        if (this.hoverTarget?.type === 'node' && this.hoverTarget.id === hit.node.id) {
+          this.invokeInteractionHandler('onNodePointerMove', hit.node, nativeEvent, pointerData);
+          this.updateCanvasCursor();
+          return;
+        }
+
+        this.clearHoverTarget();
+        this.hoverTarget = { type: 'node', id: hit.node.id };
+        this.invokeInteractionHandler('onNodePointerEnter', hit.node, nativeEvent, pointerData);
+        this.updateCanvasCursor();
+        return;
+      }
+
+      if (hit?.type === 'link') {
+        if (this.hoverTarget?.type === 'link' && this.hoverTarget.id === hit.link.id) {
+          this.invokeInteractionHandler('onLinkPointerMove', hit.link, nativeEvent, pointerData);
+          this.updateCanvasCursor();
+          return;
+        }
+
+        this.clearHoverTarget();
+        this.hoverTarget = { type: 'link', id: hit.link.id };
+        this.invokeInteractionHandler('onLinkPointerEnter', hit.link, nativeEvent, pointerData);
+        this.updateCanvasCursor();
+        return;
+      }
+
+      this.clearHoverTarget();
+    }
+
+    updateCanvasCursor() {
+      if (!this.canvas) return;
+      if (this.pointerSession?.draggingLink) {
+        this.canvas.style.cursor = 'crosshair';
+        return;
+      }
+      if (this.pointerSession?.panning) {
+        this.canvas.style.cursor = 'grabbing';
+        return;
+      }
+      if (this.hoverTarget) {
+        this.canvas.style.cursor = 'pointer';
+        return;
+      }
+      this.canvas.style.cursor = this.sceneState ? 'grab' : 'default';
+    }
+
+    clearPointerSession() {
+      this.pointerSession = null;
+      window.removeEventListener('pointermove', this.handleWindowPointerMove);
+      window.removeEventListener('pointerup', this.handleWindowPointerUp);
+      window.removeEventListener('pointercancel', this.handleWindowPointerUp);
+      this.updateCanvasCursor();
+    }
+
+    handleCanvasPointerDown(nativeEvent) {
+      if (!this.sceneState) return;
+      const isPrimaryButton = nativeEvent.button === 0 || nativeEvent.pointerType === 'touch' || nativeEvent.pointerType === 'pen';
+      if (!isPrimaryButton) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const hit = this.hitTestPointer(pointerData);
+
+      if (!hit) {
+        this.clearHoverTarget();
+      }
+
+      this.clearPointerSession();
+      this.pointerSession = {
+        pointerId: nativeEvent.pointerId,
+        type: hit?.type ?? 'background',
+        node: hit?.node ?? null,
+        link: hit?.link ?? null,
+        startClientX: nativeEvent.clientX,
+        startClientY: nativeEvent.clientY,
+        startTransform: { ...this.viewTransform },
+        draggingLink: false,
+        moved: false,
+        panning: false,
+      };
+
+      window.addEventListener('pointermove', this.handleWindowPointerMove);
+      window.addEventListener('pointerup', this.handleWindowPointerUp);
+      window.addEventListener('pointercancel', this.handleWindowPointerUp);
+      nativeEvent.preventDefault();
+      this.updateCanvasCursor();
+    }
+
+    handleCanvasPointerMove(nativeEvent) {
+      if (this.pointerSession) return;
+      this.updateHoverFromPointer(this.getPointerData(nativeEvent), nativeEvent);
+    }
+
+    handleCanvasPointerLeave() {
+      if (this.pointerSession) return;
+      this.clearHoverTarget();
+    }
+
+    handleWindowPointerMove(nativeEvent) {
+      const session = this.pointerSession;
+      if (!session || nativeEvent.pointerId !== session.pointerId) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const moveX = nativeEvent.clientX - session.startClientX;
+      const moveY = nativeEvent.clientY - session.startClientY;
+      const movedDistance = Math.hypot(moveX, moveY);
+
+      if (session.type === 'node') {
+        if (!session.draggingLink && movedDistance >= POINTER_DRAG_THRESHOLD) {
+          session.draggingLink = true;
+          this.clearHoverTarget();
+          this.invokeInteractionHandler('onArrowDragStart', session.node, nativeEvent, pointerData);
+        }
+        if (session.draggingLink) {
+          this.invokeInteractionHandler('onArrowDragMove', session.node, nativeEvent, pointerData);
+        }
+        this.updateCanvasCursor();
+        return;
+      }
+
+      if (session.type === 'background') {
+        if (!session.panning && movedDistance >= POINTER_DRAG_THRESHOLD) {
+          session.panning = true;
+        }
+        if (session.panning) {
+          this.emitViewTransformChange({
+            x: session.startTransform.x + moveX,
+            y: session.startTransform.y + moveY,
+            k: session.startTransform.k,
+          });
+        }
+        this.updateCanvasCursor();
+        return;
+      }
+
+      if (session.type === 'link' && movedDistance >= POINTER_DRAG_THRESHOLD) {
+        session.moved = true;
+      }
+    }
+
+    handleWindowPointerUp(nativeEvent) {
+      const session = this.pointerSession;
+      if (!session || nativeEvent.pointerId !== session.pointerId) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const hit = this.hitTestPointer(pointerData);
+
+      if (session.type === 'node') {
+        if (session.draggingLink) {
+          this.invokeInteractionHandler('onArrowDragEnd', session.node, nativeEvent, pointerData);
+        } else if (hit?.type === 'node' && hit.node.id === session.node?.id) {
+          this.invokeInteractionHandler('onNodeClick', session.node, nativeEvent, pointerData);
+        }
+      } else if (session.type === 'link') {
+        if (!session.moved && hit?.type === 'link' && hit.link.id === session.link?.id) {
+          this.invokeInteractionHandler('onLinkClick', session.link, nativeEvent, pointerData);
+        }
+      } else if (!session.panning) {
+        this.interactionHandlers.onBackgroundClick?.();
+      }
+
+      this.clearPointerSession();
+      if (this.isPointerInsideCanvas(pointerData)) {
+        this.updateHoverFromPointer(pointerData, nativeEvent);
+      } else {
+        this.clearHoverTarget();
+      }
+    }
+
+    handleCanvasContextMenu(nativeEvent) {
+      if (!this.sceneState) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      const hit = this.hitTestPointer(pointerData);
+      nativeEvent.preventDefault();
+
+      if (hit?.type === 'node') {
+        this.invokeInteractionHandler('onNodeContextMenu', hit.node, nativeEvent, pointerData);
+        return;
+      }
+
+      if (hit?.type === 'link') {
+        this.invokeInteractionHandler('onLinkContextMenu', hit.link, nativeEvent, pointerData);
+        return;
+      }
+
+      this.interactionHandlers.onBackgroundContextMenu?.();
+    }
+
+    handleWheel(nativeEvent) {
+      if (!this.sceneState) return;
+
+      const pointerData = this.getPointerData(nativeEvent);
+      if (!this.isPointerInsideCanvas(pointerData)) return;
+
+      nativeEvent.preventDefault();
+
+      const speed = nativeEvent.deltaMode === 1 ? 0.08 : 0.0015;
+      const nextScale = clamp(this.viewTransform.k * Math.exp(-nativeEvent.deltaY * speed), MIN_SCALE, MAX_SCALE);
+      if (nextScale === this.viewTransform.k) return;
+
+      this.emitViewTransformChange({
+        x: pointerData.screenX - pointerData.worldX * nextScale,
+        y: pointerData.screenY - pointerData.worldY * nextScale,
+        k: nextScale,
       });
     }
   }

@@ -11,6 +11,8 @@ const R_MAX = 110;
 const FORCE_LINK_GAP = 330;
 const COLLIDE_PADDING = 135;
 const BIDIR_SPLIT_OFFSET = 6;
+const MIN_VIEW_SCALE = 0.1;
+const MAX_VIEW_SCALE = 5;
 
 let nodes = [];
 let links = [];
@@ -32,6 +34,8 @@ let hoveredLinkId = null;
 let width = 0;
 let height = 0;
 let layoutRunId = 0;
+let currentViewTransform = { x: 0, y: 0, k: 1 };
+let viewAnimationFrame = null;
 
 // ---- パフォーマンス用キャッシュ ----
 let inDegreeCache = new Map();
@@ -46,28 +50,6 @@ const pixiRenderer = window.PixiGraphRenderer
   : null;
 const usePixiRenderer = Boolean(pixiRenderer?.enabled);
 
-if (usePixiRenderer) {
-  svg.classed('pixi-hit-layer', true);
-}
-
-const zoomBehavior = d3.zoom()
-  .scaleExtent([0.1, 5])
-  .on('zoom', event => {
-    const { x, y, k } = event.transform;
-    // CSS transform を使うことでブラウザがコンポジット層として GPU に乗せる
-    mainGroup.style('transform', `translate(${x}px,${y}px) scale(${k})`);
-    if (usePixiRenderer) {
-      pixiRenderer.setViewTransform(event.transform);
-    }
-  });
-
-svg.call(zoomBehavior)
-  .on('dblclick.zoom', null);
-
-if (usePixiRenderer) {
-  pixiRenderer.setViewTransform(d3.zoomIdentity);
-}
-
 const mainGroup = svg.append('g').attr('class', 'main-group');
 const linkGroup = mainGroup.append('g').attr('class', 'link-group');
 const labelGroup = mainGroup.append('g').attr('class', 'label-group');
@@ -76,6 +58,30 @@ const nodeGroup = mainGroup.append('g').attr('class', 'node-group-root');
 const dragLine = mainGroup.append('line')
   .attr('id', 'drag-line')
   .attr('visibility', 'hidden');
+
+if (usePixiRenderer) {
+  document.body.classList.add('pixi-interaction-mode');
+  svg.classed('pixi-hit-layer', true);
+}
+
+const zoomBehavior = usePixiRenderer
+  ? null
+  : d3.zoom()
+      .scaleExtent([MIN_VIEW_SCALE, MAX_VIEW_SCALE])
+      .on('zoom', event => {
+        const { x, y, k } = event.transform;
+        // CSS transform を使うことでブラウザがコンポジット層として GPU に乗せる
+        mainGroup.style('transform', `translate(${x}px,${y}px) scale(${k})`);
+      });
+
+if (zoomBehavior) {
+  svg.call(zoomBehavior)
+    .on('dblclick.zoom', null);
+}
+
+if (usePixiRenderer) {
+  applyViewTransform(currentViewTransform);
+}
 
 // 非対称リンクフォース: ターゲット（矢印の先）だけ引き寄せられ、ソースは動かない
 function forceAsymmetricLink() {
@@ -238,6 +244,68 @@ function getSvgSize() {
   if (usePixiRenderer) {
     pixiRenderer.resize(width, height);
   }
+}
+
+function clampViewScale(scale) {
+  return Math.min(MAX_VIEW_SCALE, Math.max(MIN_VIEW_SCALE, scale));
+}
+
+function normalizeViewTransform(transform) {
+  return {
+    x: Number.isFinite(transform?.x) ? transform.x : 0,
+    y: Number.isFinite(transform?.y) ? transform.y : 0,
+    k: clampViewScale(Number.isFinite(transform?.k) ? transform.k : 1),
+  };
+}
+
+function stopViewAnimation() {
+  if (viewAnimationFrame === null) return;
+  cancelAnimationFrame(viewAnimationFrame);
+  viewAnimationFrame = null;
+}
+
+function applyViewTransform(transform, { syncRenderer = true } = {}) {
+  currentViewTransform = normalizeViewTransform(transform);
+  mainGroup.style(
+    'transform',
+    `translate(${currentViewTransform.x}px,${currentViewTransform.y}px) scale(${currentViewTransform.k})`
+  );
+
+  if (usePixiRenderer && syncRenderer) {
+    pixiRenderer.setViewTransform(currentViewTransform);
+  }
+}
+
+function animateViewTransform(transform, duration = 0) {
+  const target = normalizeViewTransform(transform);
+  stopViewAnimation();
+
+  if (duration <= 0) {
+    applyViewTransform(target);
+    return;
+  }
+
+  const start = { ...currentViewTransform };
+  const startedAt = performance.now();
+
+  const step = now => {
+    const t = Math.min(1, (now - startedAt) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    applyViewTransform({
+      x: start.x + (target.x - start.x) * eased,
+      y: start.y + (target.y - start.y) * eased,
+      k: start.k + (target.k - start.k) * eased,
+    });
+
+    if (t < 1) {
+      viewAnimationFrame = requestAnimationFrame(step);
+      return;
+    }
+
+    viewAnimationFrame = null;
+  };
+
+  viewAnimationFrame = requestAnimationFrame(step);
 }
 
 function renderVisibleGraph() {
@@ -730,6 +798,15 @@ function fitView(duration = 600) {
   const centerX = (x0 + x1) / 2;
   const centerY = (y0 + y1) / 2;
 
+  if (usePixiRenderer) {
+    animateViewTransform({
+      x: width / 2 - centerX * scale,
+      y: height / 2 - centerY * scale,
+      k: scale,
+    }, duration);
+    return;
+  }
+
   const transform = d3.zoomIdentity
     .translate(width / 2, height / 2)
     .scale(scale)
@@ -744,6 +821,16 @@ function fitView(duration = 600) {
 
 function focusNode(node, duration = 500) {
   if (!node) return;
+  if (usePixiRenderer) {
+    const k = currentViewTransform.k;
+    animateViewTransform({
+      x: width / 2 - (node.x ?? 0) * k,
+      y: height / 2 - (node.y ?? 0) * k,
+      k,
+    }, duration);
+    return;
+  }
+
   // 現在の zoom スケールを維持しつつノード中心にパン
   const currentTransform = d3.zoomTransform(svg.node());
   const k = currentTransform.k;
@@ -881,7 +968,7 @@ function syncGraphElements() {
   }
 
   const linkSelection = linkGroup.selectAll('path.link-path')
-    .data(links, link => link.id);
+    .data(usePixiRenderer ? [] : links, link => link.id);
 
   linkSelection.exit().remove();
 
@@ -917,7 +1004,7 @@ function syncGraphElements() {
   }
 
   const nodeSelection = nodeGroup.selectAll('g.node-group')
-    .data(nodes, node => node.id);
+    .data(usePixiRenderer ? [] : nodes, node => node.id);
 
   nodeSelection.exit().remove();
 
@@ -1268,6 +1355,11 @@ function onNodePointerEnter(event, node) {
   renderVisibleGraph();
 }
 
+function onNodePointerMove(event, node) {
+  if (hoveredNodeId !== node.id) return;
+  showTooltip(event, node.name);
+}
+
 function onNodePointerLeave() {
   hoveredNodeId = null;
   hideTooltip();
@@ -1294,6 +1386,11 @@ function onLinkPointerEnter(event, link) {
   renderVisibleGraph();
 }
 
+function onLinkPointerMove(event, link) {
+  if (hoveredLinkId !== link.id) return;
+  showTooltip(event, link.label || '（ラベルなし）');
+}
+
 function onLinkPointerLeave() {
   hoveredLinkId = null;
   hideTooltip();
@@ -1309,6 +1406,41 @@ function onLinkRightClick(event, link) {
     scheduleSave();
     restart({ layout: true, fit: true });
   }
+}
+
+function onBackgroundPointerTap() {
+  hideContextMenu();
+  clearSelection();
+}
+
+function onBackgroundContextMenu() {
+  hideContextMenu();
+}
+
+function onPixiViewTransformChange(transform) {
+  stopViewAnimation();
+  applyViewTransform(transform, { syncRenderer: false });
+}
+
+if (usePixiRenderer) {
+  pixiRenderer.setInteractionHandlers({
+    onArrowDragEnd,
+    onArrowDragMove,
+    onArrowDragStart,
+    onBackgroundContextMenu,
+    onBackgroundClick: onBackgroundPointerTap,
+    onLinkClick,
+    onLinkContextMenu: onLinkRightClick,
+    onLinkPointerEnter,
+    onLinkPointerLeave,
+    onLinkPointerMove,
+    onNodeClick,
+    onNodeContextMenu: onNodeRightClick,
+    onNodePointerEnter,
+    onNodePointerLeave,
+    onNodePointerMove,
+    onViewTransformChange: onPixiViewTransformChange,
+  });
 }
 
 function openLabelModal(source, target, existing) {
@@ -1561,7 +1693,9 @@ document.getElementById('input-load').addEventListener('change', function () {
   this.value = '';
 });
 
-svg.on('click.selection', () => clearSelection());
+if (!usePixiRenderer) {
+  svg.on('click.selection', () => clearSelection());
+}
 
 document.addEventListener('click', () => hideContextMenu());
 document.addEventListener('contextmenu', event => {
