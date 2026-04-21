@@ -987,14 +987,13 @@ function computeLinkGeometry(link) {
   // 非スプリットの双方向プライマリは始端にも矢印スペースを確保
   const startGap = (biDirPrimarySet.has(link.id) && !split) ? source.r + 12 : source.r;
   const endGap = target.r + 12;
-  const side = biDirSecondarySet.has(link.id) ? -1 : 1;
 
   let result;
   if (split) {
     const curveOffset = Math.min(
       BIDIR_CURVE_OFFSET_MAX,
       Math.max(BIDIR_CURVE_OFFSET_MIN, distance * BIDIR_CURVE_OFFSET_FACTOR)
-    ) * side;
+    );
     const cpx = (source.x + target.x) / 2 + nx * curveOffset;
     const cpy = (source.y + target.y) / 2 + ny * curveOffset;
 
@@ -1015,8 +1014,8 @@ function computeLinkGeometry(link) {
       ex,
       ey,
       curved: true,
-      labelX: labelPoint.x + nx * BIDIR_CURVE_LABEL_OFFSET * side,
-      labelY: labelPoint.y + ny * BIDIR_CURVE_LABEL_OFFSET * side,
+      labelX: labelPoint.x + nx * BIDIR_CURVE_LABEL_OFFSET,
+      labelY: labelPoint.y + ny * BIDIR_CURVE_LABEL_OFFSET,
       arrowFromX: cpx,
       arrowFromY: cpy,
     };
