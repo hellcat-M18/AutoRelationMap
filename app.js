@@ -3,6 +3,7 @@
 // ============================================================
 
 const SVG_ID = 'map-svg';
+const MAP_CONTAINER_ID = 'map-container';
 const ICON_SIZE = 120;
 const R_BASE = 32;
 const R_MIN = 28;
@@ -26,6 +27,8 @@ let searchIndex = 0;
 let arrowSrc = null;
 let ctxTarget = null;
 let modalCallback = null;
+let hoveredNodeId = null;
+let hoveredLinkId = null;
 let width = 0;
 let height = 0;
 let layoutRunId = 0;
@@ -38,6 +41,14 @@ let maxDegreeCache = 1;
 let geometryCache = new Map();
 
 const svg = d3.select(`#${SVG_ID}`);
+const pixiRenderer = window.PixiGraphRenderer
+  ? new window.PixiGraphRenderer({ containerId: MAP_CONTAINER_ID, overlayId: SVG_ID })
+  : null;
+const usePixiRenderer = Boolean(pixiRenderer?.enabled);
+
+if (usePixiRenderer) {
+  svg.classed('pixi-hit-layer', true);
+}
 
 const zoomBehavior = d3.zoom()
   .scaleExtent([0.1, 5])
@@ -45,10 +56,17 @@ const zoomBehavior = d3.zoom()
     const { x, y, k } = event.transform;
     // CSS transform を使うことでブラウザがコンポジット層として GPU に乗せる
     mainGroup.style('transform', `translate(${x}px,${y}px) scale(${k})`);
+    if (usePixiRenderer) {
+      pixiRenderer.setViewTransform(event.transform);
+    }
   });
 
 svg.call(zoomBehavior)
   .on('dblclick.zoom', null);
+
+if (usePixiRenderer) {
+  pixiRenderer.setViewTransform(d3.zoomIdentity);
+}
 
 const mainGroup = svg.append('g').attr('class', 'main-group');
 const linkGroup = mainGroup.append('g').attr('class', 'link-group');
@@ -195,6 +213,10 @@ function linkLodOpacity(link) {
 }
 
 function updateLodStyles() {
+  if (usePixiRenderer) {
+    renderVisibleGraph();
+    return;
+  }
   nodeGroup.selectAll('g.node-group')
     .style('--node-base-lod', node => calcLodOpacity(node.r));
   linkGroup.selectAll('path.link-path')
@@ -210,9 +232,34 @@ function updateAllRadii() {
 }
 
 function getSvgSize() {
-  const element = document.getElementById(SVG_ID);
+  const element = document.getElementById(MAP_CONTAINER_ID);
   width = element.clientWidth || 800;
   height = element.clientHeight || 600;
+  if (usePixiRenderer) {
+    pixiRenderer.resize(width, height);
+  }
+}
+
+function renderVisibleGraph() {
+  if (!usePixiRenderer) return;
+  pixiRenderer.renderScene({
+    nodes,
+    links,
+    selectedNodeId,
+    searchMatchSet,
+    biDirPrimarySet,
+    biDirSecondarySet,
+    computeLinkGeometry,
+    getLabelMidpoint,
+    getLinkSourceId,
+    getLinkTargetId,
+    isBidirSplit,
+    calcLodOpacity,
+    linkLodOpacity,
+    hoveredNodeId,
+    hoveredLinkId,
+    lightweightMode: document.body.classList.contains('lightweight-mode'),
+  });
 }
 
 function updateBiDir() {
@@ -327,6 +374,8 @@ function applySelectionState() {
   } else {
     closeDetailPanel();
   }
+
+  renderVisibleGraph();
 }
 
 function nodeChip(n) {
@@ -719,6 +768,7 @@ function closeSearch() {
   searchIndex = 0;
   nodeGroup.selectAll('g.node-group').classed('search-match', false);
   updateSearchCounter();
+  renderVisibleGraph();
 }
 
 function updateSearchCounter() {
@@ -734,6 +784,7 @@ function updateSearch() {
     searchIndex = 0;
     nodeGroup.selectAll('g.node-group').classed('search-match', false);
     updateSearchCounter();
+    renderVisibleGraph();
     return;
   }
   const lower = query.toLowerCase();
@@ -745,6 +796,7 @@ function updateSearch() {
   nodeGroup.selectAll('g.node-group').classed('search-match', node => searchMatchSet.has(node.id));
   if (searchMatches.length > 0) navigateToSearchMatch();
   updateSearchCounter();
+  renderVisibleGraph();
 }
 
 function navigateToSearchMatch() {
@@ -824,6 +876,10 @@ function getLabelMidpoint(link) {
 }
 
 function syncGraphElements() {
+  if (usePixiRenderer) {
+    pixiRenderer.syncGraphElements({ nodes, links });
+  }
+
   const linkSelection = linkGroup.selectAll('path.link-path')
     .data(links, link => link.id);
 
@@ -834,25 +890,31 @@ function syncGraphElements() {
     .attr('class', 'link-path')
     .on('click', onLinkClick)
     .on('contextmenu', onLinkRightClick)
-    .on('mouseover', (event, link) => showTooltip(event, link.label || '（ラベルなし）'))
-    .on('mouseout', hideTooltip);
+    .on('mouseover', onLinkPointerEnter)
+    .on('mouseout', onLinkPointerLeave);
 
   linkEnter.merge(linkSelection)
-    .attr('marker-start', link => biDirPrimarySet.has(link.id) ? 'url(#arrow-bidir-start)' : null)
+    .attr('marker-start', link => usePixiRenderer ? null : (biDirPrimarySet.has(link.id) ? 'url(#arrow-bidir-start)' : null))
     .classed('link-bidir', link => biDirPrimarySet.has(link.id))
-    .classed('link-bidir-secondary', link => biDirSecondarySet.has(link.id));
+    .classed('link-bidir-secondary', link => biDirSecondarySet.has(link.id))
+    .style('pointer-events', usePixiRenderer ? 'stroke' : null)
+    .attr('stroke', usePixiRenderer ? 'transparent' : null)
+    .attr('stroke-width', usePixiRenderer ? 16 : null)
+    .attr('fill', 'none');
 
   const labelSelection = labelGroup.selectAll('text.link-label')
-    .data(links, link => link.id);
+    .data(usePixiRenderer ? [] : links, link => link.id);
 
   labelSelection.exit().remove();
 
-  labelSelection.enter()
-    .append('text')
-    .attr('class', 'link-label')
-    .merge(labelSelection)
-    .text(link => link.label)
-    .classed('link-bidir-secondary', link => biDirSecondarySet.has(link.id));
+  if (!usePixiRenderer) {
+    labelSelection.enter()
+      .append('text')
+      .attr('class', 'link-label')
+      .merge(labelSelection)
+      .text(link => link.label)
+      .classed('link-bidir-secondary', link => biDirSecondarySet.has(link.id));
+  }
 
   const nodeSelection = nodeGroup.selectAll('g.node-group')
     .data(nodes, node => node.id);
@@ -865,17 +927,21 @@ function syncGraphElements() {
     .attr('data-id', node => node.id)
     .on('click', onNodeClick)
     .on('contextmenu', onNodeRightClick)
-    .on('mouseover', (event, node) => showTooltip(event, node.name))
-    .on('mouseout', hideTooltip);
+    .on('mouseover', onNodePointerEnter)
+    .on('mouseout', onNodePointerLeave);
 
-  nodeEnter.append('clipPath')
-    .attr('id', node => `clip-${node.id}`)
-    .append('circle');
+  if (usePixiRenderer) {
+    nodeEnter.append('circle').attr('class', 'node-hit-area');
+  } else {
+    nodeEnter.append('clipPath')
+      .attr('id', node => `clip-${node.id}`)
+      .append('circle');
 
-  nodeEnter.append('circle').attr('class', 'node-occluder');
-  nodeEnter.append('image');
-  nodeEnter.append('circle').attr('class', 'node-ring');
-  nodeEnter.append('text').attr('class', 'node-label');
+    nodeEnter.append('circle').attr('class', 'node-occluder');
+    nodeEnter.append('image');
+    nodeEnter.append('circle').attr('class', 'node-ring');
+    nodeEnter.append('text').attr('class', 'node-label');
+  }
 
   nodeEnter.call(
     d3.drag()
@@ -886,30 +952,37 @@ function syncGraphElements() {
 
   const nodeMerge = nodeEnter.merge(nodeSelection);
 
-  nodeMerge.select('clipPath circle')
-    .attr('r', node => node.r)
-    .attr('cx', 0)
-    .attr('cy', 0);
+  if (usePixiRenderer) {
+    nodeMerge.select('.node-hit-area')
+      .attr('r', node => node.r + 10)
+      .attr('cx', 0)
+      .attr('cy', 0);
+  } else {
+    nodeMerge.select('clipPath circle')
+      .attr('r', node => node.r)
+      .attr('cx', 0)
+      .attr('cy', 0);
 
-  nodeMerge.select('.node-occluder')
-    .attr('r', node => node.r + 2)
-    .attr('cx', 0)
-    .attr('cy', 0);
+    nodeMerge.select('.node-occluder')
+      .attr('r', node => node.r + 2)
+      .attr('cx', 0)
+      .attr('cy', 0);
 
-  nodeMerge.select('image')
-    .attr('href', node => node.dataUrl || '')
-    .attr('x', node => -node.r)
-    .attr('y', node => -node.r)
-    .attr('width', node => node.r * 2)
-    .attr('height', node => node.r * 2)
-    .attr('clip-path', node => `url(#clip-${node.id})`);
+    nodeMerge.select('image')
+      .attr('href', node => node.dataUrl || '')
+      .attr('x', node => -node.r)
+      .attr('y', node => -node.r)
+      .attr('width', node => node.r * 2)
+      .attr('height', node => node.r * 2)
+      .attr('clip-path', node => `url(#clip-${node.id})`);
 
-  nodeMerge.select('.node-ring')
-    .attr('r', node => node.r);
+    nodeMerge.select('.node-ring')
+      .attr('r', node => node.r);
 
-  nodeMerge.select('.node-label')
-    .attr('y', node => node.r + 20)
-    .text(node => node.name);
+    nodeMerge.select('.node-label')
+      .attr('y', node => node.r + 20)
+      .text(node => node.name);
+  }
 
   ticked();
   updateLodStyles();
@@ -922,14 +995,18 @@ function ticked() {
   linkGroup.selectAll('path.link-path')
     .attr('d', link => computePath(link));
 
-  labelGroup.selectAll('text.link-label')
-    .attr('transform', link => {
-      const point = getLabelMidpoint(link);
-      return `translate(${point.x},${point.y})`;
-    });
+  if (!usePixiRenderer) {
+    labelGroup.selectAll('text.link-label')
+      .attr('transform', link => {
+        const point = getLabelMidpoint(link);
+        return `translate(${point.x},${point.y})`;
+      });
+  }
 
   nodeGroup.selectAll('g.node-group')
     .attr('transform', node => `translate(${node.x ?? 0},${node.y ?? 0})`);
+
+  renderVisibleGraph();
 }
 
 function getForceRadialTarget(node) {
@@ -1130,22 +1207,34 @@ function restart({ layout = true, fit = layout, seed = false } = {}) {
 
 function onArrowDragStart(event, node) {
   arrowSrc = node;
-  dragLine
-    .attr('x1', node.x)
-    .attr('y1', node.y)
-    .attr('x2', node.x)
-    .attr('y2', node.y)
-    .attr('visibility', 'visible');
+  if (usePixiRenderer) {
+    pixiRenderer.setDragLine({ visible: true, x1: node.x, y1: node.y, x2: node.x, y2: node.y });
+  } else {
+    dragLine
+      .attr('x1', node.x)
+      .attr('y1', node.y)
+      .attr('x2', node.x)
+      .attr('y2', node.y)
+      .attr('visibility', 'visible');
+  }
   event.sourceEvent.stopPropagation();
 }
 
 function onArrowDragMove(event) {
   // event.x/y はD3がタッチ・マウス問わず正しく計算した mainGroup 座標
-  dragLine.attr('x2', event.x).attr('y2', event.y);
+  if (usePixiRenderer) {
+    pixiRenderer.setDragLine({ visible: true, x1: arrowSrc?.x ?? event.x, y1: arrowSrc?.y ?? event.y, x2: event.x, y2: event.y });
+  } else {
+    dragLine.attr('x2', event.x).attr('y2', event.y);
+  }
 }
 
 function onArrowDragEnd(event) {
-  dragLine.attr('visibility', 'hidden');
+  if (usePixiRenderer) {
+    pixiRenderer.setDragLine({ visible: false, x1: 0, y1: 0, x2: 0, y2: 0 });
+  } else {
+    dragLine.attr('visibility', 'hidden');
+  }
   if (!arrowSrc) return;
 
   const mouseX = event.x, mouseY = event.y;
@@ -1173,6 +1262,18 @@ function onNodeClick(event, node) {
   applySelectionState();
 }
 
+function onNodePointerEnter(event, node) {
+  hoveredNodeId = node.id;
+  showTooltip(event, node.name);
+  renderVisibleGraph();
+}
+
+function onNodePointerLeave() {
+  hoveredNodeId = null;
+  hideTooltip();
+  renderVisibleGraph();
+}
+
 // ---- 長押しは廃止。ノード編集は詳細パネルのボタンで行う ----
 
 function onNodeRightClick(event, node) {
@@ -1185,6 +1286,18 @@ function onLinkClick(event, link) {
   event.stopPropagation();
   hideContextMenu();
   openLabelModal(getLinkSourceNode(link), getLinkTargetNode(link), link);
+}
+
+function onLinkPointerEnter(event, link) {
+  hoveredLinkId = link.id;
+  showTooltip(event, link.label || '（ラベルなし）');
+  renderVisibleGraph();
+}
+
+function onLinkPointerLeave() {
+  hoveredLinkId = null;
+  hideTooltip();
+  renderVisibleGraph();
 }
 
 function onLinkRightClick(event, link) {

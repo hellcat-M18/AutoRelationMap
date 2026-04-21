@@ -179,9 +179,22 @@ button:hover { background: #d0dcea; }
   background: var(--map-bg);
 }
 
-#map-svg {
+#pixi-layer {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+#map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 2;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -197,6 +210,33 @@ button:hover { background: #d0dcea; }
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+#map-svg.pixi-hit-layer .label-group {
+  display: none;
+}
+
+#map-svg.pixi-hit-layer .node-group image,
+#map-svg.pixi-hit-layer .node-group .node-ring,
+#map-svg.pixi-hit-layer .node-group .node-label,
+#map-svg.pixi-hit-layer .node-group .node-occluder,
+#map-svg.pixi-hit-layer .node-group clipPath,
+#map-svg.pixi-hit-layer #drag-line {
+  display: none;
+}
+
+#map-svg.pixi-hit-layer .node-hit-area {
+  fill: transparent;
+  pointer-events: all;
+}
+
+#map-svg.pixi-hit-layer .link-group path {
+  fill: none !important;
+  stroke: transparent !important;
+  stroke-width: 16 !important;
+  opacity: 1 !important;
+  transition: none !important;
+  pointer-events: stroke;
 }
 
 /* リンク（矢印線） */
