@@ -247,6 +247,12 @@ body.lightweight-mode #map-svg.selection-active .label-group text.link-label.hig
   -webkit-touch-callout: none;
 }
 
+/* ズーム/パンをGPUコンポジット層で処理する */
+#map-svg .main-group {
+  will-change: transform;
+  transform-origin: 0 0;
+}
+
 #map-svg * {
   user-select: none;
   -webkit-user-select: none;
