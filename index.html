@@ -61,13 +61,13 @@
   <!-- メインキャンバス領域 -->
   <div id="map-container">
 
-    <!-- 検索バー (Ctrl+F) -->
-    <div id="search-bar" class="hidden">
+    <!-- 検索バー (常駐) -->
+    <div id="search-bar">
       <input type="text" id="search-input" placeholder="名前を検索..." maxlength="50" autocomplete="off" />
       <span id="search-counter"></span>
       <button id="search-prev" title="前へ (Shift+Enter)">↑</button>
       <button id="search-next" title="次へ (Enter)">↓</button>
-      <button id="search-close">✕</button>
+      <button id="search-close" title="クリア">✕</button>
     </div>
 
     <svg id="map-svg">

@@ -487,7 +487,6 @@ button:hover { background: #d0dcea; }
   box-shadow: 0 2px 12px #0002;
   z-index: 50;
 }
-#search-bar.hidden { display: none; }
 #search-input {
   border: none;
   outline: none;

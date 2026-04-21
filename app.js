@@ -705,14 +705,12 @@ function focusNode(node, duration = 500) {
 
 // ---- 検索 ----
 function openSearch() {
-  document.getElementById('search-bar').classList.remove('hidden');
   const input = document.getElementById('search-input');
   input.focus();
   input.select();
 }
 
 function closeSearch() {
-  document.getElementById('search-bar').classList.add('hidden');
   document.getElementById('search-input').value = '';
   searchMatches = [];
   searchMatchSet.clear();
