@@ -397,7 +397,7 @@
       const sceneLod = r => {
         if (r >= lodThreshold) return 1;
         const t = Math.max(0, r / lodThreshold);
-        return 0.15 + 0.85 * t * t;
+        return 0.15 + 0.85 * t;
       };
       const nodeRMap = new Map(nodes.map(n => [n.id, n.r]));
 
