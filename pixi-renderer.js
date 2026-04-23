@@ -391,6 +391,16 @@
       this.colors = getThemeColors();
       this.syncGraphElements({ nodes, links });
 
+      // シーン内の実際の最大半径を基準にLODを計算（マップの規模に自動追従）
+      const maxNodeR = nodes.reduce((m, n) => Math.max(m, n.r), 1);
+      const lodThreshold = maxNodeR * 0.8; // 上位80%以上は不透明度1.0
+      const sceneLod = r => {
+        if (r >= lodThreshold) return 1;
+        const t = Math.max(0, r / lodThreshold);
+        return 0.15 + 0.85 * t * t;
+      };
+      const nodeRMap = new Map(nodes.map(n => [n.id, n.r]));
+
       const connectedIds = new Set();
       if (selectedNodeId !== null) {
         links.forEach(link => {
@@ -422,7 +432,10 @@
 
         let color = this.colors.graphAccent;
         let width = primaryBidir ? 3 : 1.5;
-        let alpha = linkLodOpacity(link);
+        let alpha = sceneLod(Math.min(
+          nodeRMap.get(getLinkSourceId(link)) ?? maxNodeR,
+          nodeRMap.get(getLinkTargetId(link)) ?? maxNodeR
+        ));
 
         if (selectionActive && highlightType === 'none') alpha = 0.2;
 
@@ -494,7 +507,10 @@
           ? 1
           : selectionActive
             ? 0.15
-            : linkLodOpacity(link);
+            : sceneLod(Math.min(
+                nodeRMap.get(getLinkSourceId(link)) ?? maxNodeR,
+                nodeRMap.get(getLinkTargetId(link)) ?? maxNodeR
+              ));
       });
 
       nodes.forEach(node => {
@@ -510,7 +526,7 @@
         const visible = !lightweightMode || !selectionActive || selected || connected;
         // スクリーン上の見かけのサイズでLODを計算（ズームイン時は濃く、ズームアウト時は初期視点より薄くしない）
         const screenR = node.r * Math.max(1, this.viewTransform.k);
-        const baseLod = calcLodOpacity(screenR);
+        const baseLod = sceneLod(screenR);
         const selectionLod = selectionActive && !selected && !connected && !searchMatch ? 0.18 : 1;
         const alpha = baseLod * selectionLod;
 
