@@ -14,7 +14,6 @@ const BIDIR_CURVE_OFFSET_MIN = 48;
 const BIDIR_CURVE_OFFSET_MAX = 150;
 const BIDIR_CURVE_OFFSET_FACTOR = 0.24;
 const BIDIR_CURVE_LABEL_OFFSET = 10;
-const MAX_OUTGOING_LINKS = 25;
 const MIN_VIEW_SCALE = 0.1;
 const MAX_VIEW_SCALE = 5;
 
@@ -517,26 +516,12 @@ function closeDetailPanel() {
   }
 }
 
-function hideModalLimitBadge() {
-  const badge = document.getElementById('modal-limit-badge');
-  badge.textContent = '';
-  badge.classList.add('hidden');
-  badge.classList.remove('over-limit');
-}
-
-function showModalLimitBadge(current, max) {
-  const badge = document.getElementById('modal-limit-badge');
-  badge.textContent = `${current}/${max}`;
-  badge.classList.remove('hidden');
-  badge.classList.toggle('over-limit', current > max);
-}
 
 // ---- ノード編集共通ロジック（詳細パネルボタン・右クリックメニュー共用） ----
 function openEditNameDialog(node) {
   const titleEl = document.getElementById('modal-title');
   const descEl  = document.getElementById('modal-desc');
   const inputEl = document.getElementById('modal-input');
-  hideModalLimitBadge();
   titleEl.textContent = '名前を変更';
   descEl.textContent  = '';
   inputEl.value       = node.name;
@@ -1575,12 +1560,8 @@ function openLabelModal(source, target, existing) {
   const overlay = document.getElementById('modal-overlay');
   const desc = document.getElementById('modal-desc');
   const input = document.getElementById('modal-input');
-  const outCount = links.filter(l => getLinkSourceId(l) === source.id).length;
-  const projectedOutCount = outCount + (existing ? 0 : 1);
-
   desc.textContent = `${source.name}  →  ${target.name}`;
   input.value = existing?.label ?? '';
-  showModalLimitBadge(projectedOutCount, MAX_OUTGOING_LINKS);
   overlay.classList.remove('hidden');
   input.focus();
 
@@ -1590,12 +1571,6 @@ function openLabelModal(source, target, existing) {
       broadcastOp('link_edit', { id: existing.id, label });
       scheduleSave();
       restart({ layout: false, fit: false });
-      return;
-    }
-
-    const currentOutCount = links.filter(l => getLinkSourceId(l) === source.id).length;
-    if (currentOutCount >= MAX_OUTGOING_LINKS) {
-      showNotify(`「${source.name}」から出る矢印は最大${MAX_OUTGOING_LINKS}本までです。`);
       return;
     }
 
@@ -1611,7 +1586,6 @@ function openLabelModal(source, target, existing) {
 
 function closeModal(ok, label) {
   document.getElementById('modal-overlay').classList.add('hidden');
-  hideModalLimitBadge();
   if (ok && modalCallback) modalCallback(label ?? '');
   modalCallback = null;
 }
