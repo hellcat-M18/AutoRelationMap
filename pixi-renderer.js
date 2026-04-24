@@ -623,7 +623,6 @@
         const { highlightType, primaryBidir, secondaryVisible, split, visible } = this.getLinkVisualState(link, options);
         const hover = hoveredLinkId === link.id;
 
-        view.lastGeometry = geometry;
         view.visibleForHit = Boolean(geometry && visible);
 
         if (!geometry || !visible) {
