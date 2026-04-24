@@ -136,6 +136,13 @@
       this.pointerSession = null;
       this.touchPoints = new Map();
       this.pinchSession = null;
+      this.graphStructureState = {
+        nodesRef: null,
+        linksRef: null,
+        nodeCount: 0,
+        linkCount: 0,
+      };
+      this.sceneDerivedState = null;
 
       if (!window.PIXI || !this.container) return;
 
@@ -226,15 +233,18 @@
 
     setViewTransform(transform) {
       if (!this.enabled) return;
-      this.viewTransform = {
+      const previousTransform = this.viewTransform;
+      const nextTransform = {
         x: Number.isFinite(transform?.x) ? transform.x : 0,
         y: Number.isFinite(transform?.y) ? transform.y : 0,
         k: clamp(Number.isFinite(transform?.k) ? transform.k : 1, MIN_SCALE, MAX_SCALE),
       };
+      this.viewTransform = nextTransform;
       this.world.position.set(this.viewTransform.x, this.viewTransform.y);
       this.world.scale.set(this.viewTransform.k, this.viewTransform.k);
-      // ズーム変化をLOD opacity に即時反映
-      if (this.sceneState) this.renderScene(this.sceneState);
+      if (this.sceneState && previousTransform.k !== nextTransform.k) {
+        this.refreshZoomScaledNodeVisuals();
+      }
     }
 
     setDragLine({ visible, x1, y1, x2, y2 }) {
@@ -255,6 +265,14 @@
 
     syncGraphElements({ nodes, links }) {
       if (!this.enabled) return;
+      if (
+        this.graphStructureState.nodesRef === nodes
+        && this.graphStructureState.linksRef === links
+        && this.graphStructureState.nodeCount === nodes.length
+        && this.graphStructureState.linkCount === links.length
+      ) {
+        return;
+      }
 
       const liveNodeIds = new Set(nodes.map(node => node.id));
       for (const [id, view] of this.nodeViews) {
@@ -280,6 +298,13 @@
           this.linkViews.set(link.id, this.createLinkView());
         }
       });
+
+      this.graphStructureState = {
+        nodesRef: nodes,
+        linksRef: links,
+        nodeCount: nodes.length,
+        linkCount: links.length,
+      };
     }
 
     createNodeView() {
@@ -308,6 +333,17 @@
         label,
         iconSrc: '',
         visibleForHit: false,
+        labelText: '',
+        lastX: NaN,
+        lastY: NaN,
+        lastRadius: NaN,
+        lastAlpha: NaN,
+        lastOccluderColor: null,
+        lastBackdropColor: null,
+        lastRingColor: null,
+        lastRingRadius: NaN,
+        lastRingWidth: NaN,
+        lastLabelY: NaN,
       };
     }
 
@@ -322,7 +358,191 @@
         label,
         lastGeometry: null,
         visibleForHit: false,
+        labelText: '',
+        lastStrokeColor: null,
+        lastStrokeWidth: NaN,
+        lastPrimaryBidir: false,
+        lastSplit: false,
+        lastGraphicsAlpha: NaN,
+        lastLabelX: NaN,
+        lastLabelY: NaN,
+        lastLabelFill: null,
+        lastLabelAlpha: NaN,
       };
+    }
+
+    buildSceneDerivedState(options) {
+      const {
+        nodes,
+        links,
+        selectedNodeId,
+        getLinkSourceId,
+        getLinkTargetId,
+      } = options;
+
+      const maxNodeR = nodes.reduce((m, n) => Math.max(m, n.r), 1);
+      const lodThreshold = maxNodeR * 0.8;
+      const sceneLod = r => {
+        if (r >= lodThreshold) return 1;
+        const t = Math.max(0, r / lodThreshold);
+        return 0.15 + 0.85 * t;
+      };
+      const nodeRMap = new Map(nodes.map(node => [node.id, node.r]));
+      const connectedIds = new Set();
+
+      if (selectedNodeId !== null) {
+        links.forEach(link => {
+          const sourceId = getLinkSourceId(link);
+          const targetId = getLinkTargetId(link);
+          if (sourceId === selectedNodeId) connectedIds.add(targetId);
+          if (targetId === selectedNodeId) connectedIds.add(sourceId);
+        });
+      }
+
+      return {
+        maxNodeR,
+        nodeRMap,
+        sceneLod,
+        connectedIds,
+        selectionActive: selectedNodeId !== null,
+      };
+    }
+
+    updateNodeAlpha(view, alpha) {
+      if (view.lastAlpha === alpha) return;
+      view.backdrop.alpha = alpha;
+      view.sprite.alpha = alpha;
+      view.ring.alpha = alpha;
+      view.label.alpha = alpha;
+      view.lastAlpha = alpha;
+    }
+
+    refreshZoomScaledNodeVisuals() {
+      if (!this.sceneState || !this.sceneDerivedState) return;
+
+      const {
+        nodes,
+        selectedNodeId,
+        searchMatchSet,
+        hoveredNodeId,
+        arrowDragSourceId,
+        arrowDragTargetId,
+        lightweightMode,
+      } = this.sceneState;
+      const { connectedIds, sceneLod, selectionActive } = this.sceneDerivedState;
+
+      nodes.forEach(node => {
+        const view = this.nodeViews.get(node.id);
+        if (!view) return;
+
+        const selected = node.id === selectedNodeId;
+        const connected = connectedIds.has(node.id);
+        const searchMatch = searchMatchSet.has(node.id);
+        const hovered = hoveredNodeId === node.id
+          || arrowDragSourceId === node.id
+          || arrowDragTargetId === node.id;
+        const visible = !lightweightMode || !selectionActive || selected || connected;
+        const screenR = node.r * Math.max(1, this.viewTransform.k);
+        const baseLod = sceneLod(screenR);
+        const selectionLod = selectionActive && !selected && !connected && !searchMatch ? 0.18 : 1;
+        const alpha = baseLod * selectionLod;
+
+        view.visibleForHit = visible;
+        view.root.visible = visible;
+        if (!visible) return;
+
+        this.updateNodeAlpha(view, alpha);
+      });
+    }
+
+    redrawLinkGraphics(view, geometry, color, width, primaryBidir, split) {
+      view.graphics.clear();
+      view.graphics.lineStyle({
+        width,
+        color,
+        alpha: 1,
+        cap: PIXI.LINE_CAP.ROUND,
+        join: PIXI.LINE_JOIN.ROUND,
+      });
+      view.graphics.moveTo(geometry.sx, geometry.sy);
+      if (geometry.curved) {
+        view.graphics.quadraticCurveTo(geometry.cpx, geometry.cpy, geometry.ex, geometry.ey);
+      } else {
+        view.graphics.lineTo(geometry.ex, geometry.ey);
+      }
+      drawArrowHead(
+        view.graphics,
+        geometry.arrowFromX,
+        geometry.arrowFromY,
+        geometry.ex,
+        geometry.ey,
+        width,
+        color,
+        1
+      );
+      if (primaryBidir && !split) {
+        drawArrowHead(view.graphics, geometry.ex, geometry.ey, geometry.sx, geometry.sy, width, color, 1);
+      }
+
+      view.lastGeometry = geometry;
+      view.lastStrokeColor = color;
+      view.lastStrokeWidth = width;
+      view.lastPrimaryBidir = primaryBidir;
+      view.lastSplit = split;
+    }
+
+    redrawNodeBase(view, node) {
+      if (view.lastRadius !== node.r || view.lastOccluderColor !== this.colors.mapBg) {
+        drawOccluderCircle(view.occluder, node.r + 2, this.colors.mapBg);
+        view.lastOccluderColor = this.colors.mapBg;
+      }
+
+      if (view.lastRadius !== node.r || view.lastBackdropColor !== this.colors.blankNodeFill) {
+        view.backdrop.clear();
+        view.backdrop.beginFill(this.colors.blankNodeFill, 1);
+        view.backdrop.drawCircle(0, 0, node.r);
+        view.backdrop.endFill();
+        view.lastBackdropColor = this.colors.blankNodeFill;
+      }
+
+      if (view.lastRadius !== node.r) {
+        view.mask.clear();
+        view.mask.beginFill(this.colors.white, 1);
+        view.mask.drawCircle(0, 0, node.r);
+        view.mask.endFill();
+      }
+
+      if (view.lastRadius !== node.r) {
+        const spriteSize = node.r * 2;
+        view.sprite.width = spriteSize;
+        view.sprite.height = spriteSize;
+        view.label.position.set(0, node.r + 20);
+        view.lastLabelY = node.r + 20;
+        view.lastRadius = node.r;
+      }
+    }
+
+    redrawNodeRing(view, node, ringColor, ringWidth) {
+      if (
+        view.lastRingRadius === node.r
+        && view.lastRingColor === ringColor
+        && view.lastRingWidth === ringWidth
+      ) {
+        return;
+      }
+
+      view.ring.clear();
+      view.ring.lineStyle({
+        width: ringWidth,
+        color: ringColor,
+        alpha: 1,
+        cap: PIXI.LINE_CAP.ROUND,
+        join: PIXI.LINE_JOIN.ROUND,
+      });
+      view.ring.drawCircle(0, 0, node.r);
+      view.lastRingRadius = node.r;
+      view.lastRingColor = ringColor;
+      view.lastRingWidth = ringWidth;
     }
 
     getLinkVisualState(link, state = this.sceneState) {
@@ -391,27 +611,9 @@
       this.colors = getThemeColors();
       this.syncGraphElements({ nodes, links });
 
-      // シーン内の実際の最大半径を基準にLODを計算（マップの規模に自動追従）
-      const maxNodeR = nodes.reduce((m, n) => Math.max(m, n.r), 1);
-      const lodThreshold = maxNodeR * 0.8; // 上位80%以上は不透明度1.0
-      const sceneLod = r => {
-        if (r >= lodThreshold) return 1;
-        const t = Math.max(0, r / lodThreshold);
-        return 0.15 + 0.85 * t;
-      };
-      const nodeRMap = new Map(nodes.map(n => [n.id, n.r]));
-
-      const connectedIds = new Set();
-      if (selectedNodeId !== null) {
-        links.forEach(link => {
-          const sourceId = getLinkSourceId(link);
-          const targetId = getLinkTargetId(link);
-          if (sourceId === selectedNodeId) connectedIds.add(targetId);
-          if (targetId === selectedNodeId) connectedIds.add(sourceId);
-        });
-      }
-
-      const selectionActive = selectedNodeId !== null;
+      const derivedState = this.buildSceneDerivedState(options);
+      this.sceneDerivedState = derivedState;
+      const { maxNodeR, nodeRMap, sceneLod, connectedIds, selectionActive } = derivedState;
 
       links.forEach(link => {
         const view = this.linkViews.get(link.id);
@@ -458,32 +660,18 @@
         }
 
         view.graphics.visible = true;
-        view.graphics.clear();
-        view.graphics.lineStyle({
-          width,
-          color,
-          alpha,
-          cap: PIXI.LINE_CAP.ROUND,
-          join: PIXI.LINE_JOIN.ROUND,
-        });
-        view.graphics.moveTo(geometry.sx, geometry.sy);
-        if (geometry.curved) {
-          view.graphics.quadraticCurveTo(geometry.cpx, geometry.cpy, geometry.ex, geometry.ey);
-        } else {
-          view.graphics.lineTo(geometry.ex, geometry.ey);
+        if (
+          view.lastGeometry !== geometry
+          || view.lastStrokeColor !== color
+          || view.lastStrokeWidth !== width
+          || view.lastPrimaryBidir !== primaryBidir
+          || view.lastSplit !== split
+        ) {
+          this.redrawLinkGraphics(view, geometry, color, width, primaryBidir, split);
         }
-        drawArrowHead(
-          view.graphics,
-          geometry.arrowFromX,
-          geometry.arrowFromY,
-          geometry.ex,
-          geometry.ey,
-          width,
-          color,
-          alpha
-        );
-        if (primaryBidir && !split) {
-          drawArrowHead(view.graphics, geometry.ex, geometry.ey, geometry.sx, geometry.sy, width, color, alpha);
+        if (view.lastGraphicsAlpha !== alpha) {
+          view.graphics.alpha = alpha;
+          view.lastGraphicsAlpha = alpha;
         }
 
         const labelHighlighted = selectedNodeId !== null
@@ -496,14 +684,26 @@
         if (!labelVisible) return;
 
         const midpoint = getLabelMidpoint(link);
-        view.label.text = link.label;
-        view.label.position.set(midpoint.x, midpoint.y);
-        view.label.style.fill = highlightType === 'out'
+        const labelText = link.label ?? '';
+        if (view.labelText !== labelText) {
+          view.label.text = labelText;
+          view.labelText = labelText;
+        }
+        if (view.lastLabelX !== midpoint.x || view.lastLabelY !== midpoint.y) {
+          view.label.position.set(midpoint.x, midpoint.y);
+          view.lastLabelX = midpoint.x;
+          view.lastLabelY = midpoint.y;
+        }
+        const labelFill = highlightType === 'out'
           ? this.colors.graphOut
           : highlightType === 'in'
             ? this.colors.graphIn
             : this.colors.graphAccent;
-        view.label.alpha = labelHighlighted
+        if (view.lastLabelFill !== labelFill) {
+          view.label.style.fill = labelFill;
+          view.lastLabelFill = labelFill;
+        }
+        const labelAlpha = labelHighlighted
           ? 1
           : selectionActive
             ? 0.15
@@ -511,6 +711,10 @@
                 nodeRMap.get(getLinkSourceId(link)) ?? maxNodeR,
                 nodeRMap.get(getLinkTargetId(link)) ?? maxNodeR
               ));
+        if (view.lastLabelAlpha !== labelAlpha) {
+          view.label.alpha = labelAlpha;
+          view.lastLabelAlpha = labelAlpha;
+        }
       });
 
       nodes.forEach(node => {
@@ -534,19 +738,15 @@
         view.root.visible = visible;
         if (!visible) return;
 
-        view.root.position.set(node.x ?? 0, node.y ?? 0);
+        const x = node.x ?? 0;
+        const y = node.y ?? 0;
+        if (view.lastX !== x || view.lastY !== y) {
+          view.root.position.set(x, y);
+          view.lastX = x;
+          view.lastY = y;
+        }
 
-        drawOccluderCircle(view.occluder, node.r + 2, this.colors.mapBg);
-
-        view.backdrop.clear();
-        view.backdrop.beginFill(this.colors.blankNodeFill, alpha);
-        view.backdrop.drawCircle(0, 0, node.r);
-        view.backdrop.endFill();
-
-        view.mask.clear();
-        view.mask.beginFill(this.colors.white, 1);
-        view.mask.drawCircle(0, 0, node.r);
-        view.mask.endFill();
+        this.redrawNodeBase(view, node);
 
         const iconSrc = node.dataUrl || '';
         if (view.iconSrc !== iconSrc) {
@@ -555,9 +755,6 @@
         }
 
         view.sprite.visible = Boolean(iconSrc);
-        view.sprite.width = node.r * 2;
-        view.sprite.height = node.r * 2;
-        view.sprite.alpha = alpha;
 
         let ringColor = this.colors.graphAccent;
         let ringWidth = 2.5;
@@ -574,19 +771,14 @@
           ringWidth = 3.5;
         }
 
-        view.ring.clear();
-        view.ring.lineStyle({
-          width: ringWidth,
-          color: ringColor,
-          alpha,
-          cap: PIXI.LINE_CAP.ROUND,
-          join: PIXI.LINE_JOIN.ROUND,
-        });
-        view.ring.drawCircle(0, 0, node.r);
+        this.redrawNodeRing(view, node, ringColor, ringWidth);
 
-        view.label.text = node.name;
-        view.label.position.set(0, node.r + 20);
-        view.label.alpha = alpha;
+        if (view.labelText !== node.name) {
+          view.label.text = node.name;
+          view.labelText = node.name;
+        }
+
+        this.updateNodeAlpha(view, alpha);
       });
 
       this.updateCanvasCursor();
