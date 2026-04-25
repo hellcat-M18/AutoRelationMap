@@ -76,11 +76,12 @@ async function loadAll() {
 
 // ---- 参加者 ----
 async function loadParticipants() {
-  // BAN リスト取得
+  // BAN リスト取得（actor_name も保持）
   const { data: banRows } = await sb.from('banned_accounts')
-    .select('banned_user_id')
+    .select('banned_user_id, actor_name')
     .eq('map_id', mapId);
   bannedIds = new Set((banRows ?? []).map(r => r.banned_user_id));
+  const bannedNameMap = new Map((banRows ?? []).map(r => [r.banned_user_id, r.actor_name]));
 
   // ノード・リンクのオーナーから参加者を収集
   const [{ data: nodeOwners }, { data: linkOwners }] = await Promise.all([
@@ -91,6 +92,8 @@ async function loadParticipants() {
   const participantIds = new Set([
     ...(nodeOwners ?? []).map(r => r.owner_id),
     ...(linkOwners ?? []).map(r => r.owner_id),
+    // BAN 済みユーザーも一覧に含める（コンテンツは削除済みだが管理対象として表示）
+    ...bannedIds,
   ]);
 
   // ログから名前を取得（最新を優先）
@@ -106,7 +109,8 @@ async function loadParticipants() {
 
   const participants = [...participantIds].map(id => ({
     id,
-    name: nameMap.get(id) || id.slice(0, 8) + '…',
+    // ログ名 → BAN 時に保存した名前 → ID 前半 の順で fallback
+    name: nameMap.get(id) || bannedNameMap.get(id) || id.slice(0, 8) + '…',
     isBanned: bannedIds.has(id),
     isOwner: id === mapOwnerId,
   }));
@@ -258,11 +262,12 @@ async function banUser(userId, userName) {
     .eq('map_id', mapId)
     .eq('actor_id', userId);
 
-  // 4. BAN 登録
+  // 4. BAN 登録（actor_name を保存して BAN 後も名前を維持）
   const { error: banErr } = await sb.from('banned_accounts').insert({
     map_id: mapId,
     banned_user_id: userId,
     banned_by: currentUser.id,
+    actor_name: userName,
   });
   if (banErr) { alert('BAN処理に失敗しました: ' + banErr.message); return; }
 
