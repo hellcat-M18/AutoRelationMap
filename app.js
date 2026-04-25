@@ -2241,7 +2241,8 @@ async function uploadIconToStorage(dataUrl) {
 }
 
 function copyShareLink() {
-  navigator.clipboard.writeText(window.location.href).then(() => {
+  const url = window.location.origin + window.location.pathname;
+  navigator.clipboard.writeText(url).then(() => {
     showNotify('共有リンクをコピーしました');
   });
 }
@@ -2282,6 +2283,10 @@ if (sb) {
 
   sb.auth.onAuthStateChange((event, session) => {
     currentUser = session?.user ?? null;
+    // OAuth リダイレクト後の URL からトークンハッシュを除去
+    if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
     updateAuthUI();
     if (event === 'SIGNED_IN' && sessionStorage.getItem('pendingCreateMap') === '1') {
       sessionStorage.removeItem('pendingCreateMap');
