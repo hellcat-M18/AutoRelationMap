@@ -1,6 +1,11 @@
 {
   "rewrites": [
-    { "source": "/config.js",  "destination": "/api/config" },
-    { "source": "/map/:id",    "destination": "/api/map/:id" }
+    { "source": "/config.js",       "destination": "/api/config" },
+    { "source": "/map/:id",         "destination": "/api/map/:id" }
+  ],
+  "redirects": [
+    { "source": "/",                "destination": "/maintenance.html", "permanent": false },
+    { "source": "/map/:id",         "destination": "/maintenance.html", "permanent": false },
+    { "source": "/((?!maintenance|api|_next|favicon).*)", "destination": "/maintenance.html", "permanent": false }
   ]
 }

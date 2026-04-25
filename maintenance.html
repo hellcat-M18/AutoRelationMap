@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>メンテナンス中 | AutoRelationMap</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f4f8;
+      --accent: #1a6fa5;
+      --text-primary: #1a1a2e;
+      --text-secondary: #5a6a7e;
+      --card-bg: #ffffff;
+      --border: #d8e2ec;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+      color: var(--text-primary);
+      padding: 24px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px 40px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(26, 111, 165, 0.08);
+    }
+
+    .icon {
+      font-size: 48px;
+      margin-bottom: 24px;
+      display: block;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 12px;
+      letter-spacing: 0.02em;
+    }
+
+    p {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      margin-bottom: 8px;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 28px 0;
+    }
+
+    .brand {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="icon">🔧</span>
+    <h1>メンテナンス中</h1>
+    <p>現在、AutoRelationMap はメンテナンスのため一時的にご利用いただけません。</p>
+    <p>ご不便をおかけして申し訳ありません。しばらくしてから再度アクセスしてください。</p>
+    <hr class="divider" />
+    <span class="brand">AutoRelationMap</span>
+  </div>
+</body>
+</html>
