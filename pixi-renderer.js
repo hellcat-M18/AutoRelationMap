@@ -455,6 +455,95 @@
       });
     }
 
+    refreshHoverVisuals({ hoveredNodeId, hoveredLinkId }) {
+      if (!this.sceneDerivedState || !this.sceneState) return;
+
+      const prevNodeId = this.sceneState.hoveredNodeId;
+      const prevLinkId = this.sceneState.hoveredLinkId;
+
+      // スナップショットを更新（renderScene のキャッシュと同期）
+      this.sceneState = { ...this.sceneState, hoveredNodeId, hoveredLinkId };
+
+      this.colors = getThemeColors();
+      const { connectedIds, sceneLod, selectionActive, nodeRMap, maxNodeR } = this.sceneDerivedState;
+      const {
+        selectedNodeId,
+        searchMatchSet,
+        arrowDragSourceId,
+        arrowDragTargetId,
+        nodes,
+        links,
+        getLinkSourceId,
+        getLinkTargetId,
+      } = this.sceneState;
+
+      // ---- 影響ノード: 前後の hovered のみ ----
+      const affectedNodeIds = new Set();
+      if (prevNodeId !== null) affectedNodeIds.add(prevNodeId);
+      if (hoveredNodeId !== null) affectedNodeIds.add(hoveredNodeId);
+
+      affectedNodeIds.forEach(id => {
+        const node = nodes.find(n => n.id === id);
+        const view = this.nodeViews.get(id);
+        if (!node || !view || !view.root.visible) return;
+
+        const connected = connectedIds.has(node.id);
+        const searchMatch = searchMatchSet.has(node.id);
+        const selected = node.id === selectedNodeId;
+        const hovered = node.id === hoveredNodeId
+          || node.id === arrowDragSourceId
+          || node.id === arrowDragTargetId;
+
+        let ringColor = this.colors.graphAccent;
+        let ringWidth = 2.5;
+        if (connected) { ringColor = this.colors.nodeConnected; ringWidth = 3.5; }
+        if (searchMatch) { ringColor = this.colors.nodeSearch; ringWidth = Math.max(ringWidth, 3); }
+        if (selected || hovered) { ringColor = this.colors.nodeHover; ringWidth = 3.5; }
+
+        this.redrawNodeRing(view, node, ringColor, ringWidth);
+      });
+
+      // ---- 影響リンク: 前後の hovered のみ ----
+      const affectedLinkIds = new Set();
+      if (prevLinkId !== null) affectedLinkIds.add(prevLinkId);
+      if (hoveredLinkId !== null) affectedLinkIds.add(hoveredLinkId);
+
+      affectedLinkIds.forEach(id => {
+        const link = links.find(l => l.id === id);
+        const view = this.linkViews.get(id);
+        if (!link || !view || !view.visibleForHit || !view.lastGeometry) return;
+
+        const { highlightType, primaryBidir, split } = this.getLinkVisualState(link);
+        const hover = id === hoveredLinkId;
+
+        let color = this.colors.graphAccent;
+        let width = primaryBidir ? 3 : 1.5;
+        let alpha = sceneLod(Math.min(
+          nodeRMap.get(getLinkSourceId(link)) ?? maxNodeR,
+          nodeRMap.get(getLinkTargetId(link)) ?? maxNodeR,
+        ));
+
+        if (selectionActive && highlightType === 'none') alpha = 0.2;
+        if (highlightType === 'out') { color = this.colors.graphOut; width = 2.5; alpha = 1; }
+        else if (highlightType === 'in') { color = this.colors.graphIn; width = 2.5; alpha = 1; }
+        else if (highlightType === 'bidir') { color = this.colors.graphAccent; width = 4; alpha = 1; }
+        else if (hover) { color = this.colors.graphHover; width = 2.5; alpha = 1; }
+
+        if (
+          view.lastStrokeColor !== color
+          || view.lastStrokeWidth !== width
+          || view.lastPrimaryBidir !== primaryBidir
+          || view.lastSplit !== split
+        ) {
+          this.redrawLinkGraphics(view, view.lastGeometry, color, width, primaryBidir, split);
+        }
+        if (view.lastGraphicsAlpha !== alpha) {
+          view.graphics.alpha = alpha;
+          view.lastGraphicsAlpha = alpha;
+        }
+      });
+    }
+
     redrawLinkGraphics(view, geometry, color, width, primaryBidir, split) {
       view.graphics.clear();
       view.graphics.lineStyle({

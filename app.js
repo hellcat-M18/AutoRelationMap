@@ -373,77 +373,80 @@ function getConnectedNodeIds(centerNodeId) {
 }
 
 function applySelectionState() {
-  // 選択ノードに隣接するノードIDセットを構築
-  const connectedIds = getConnectedNodeIds(selectedNodeId);
-
-  nodeGroup.selectAll('g.node-group')
-    .classed('selected',  node => node.id === selectedNodeId)
-    .classed('connected', node => connectedIds.has(node.id));
-
-  linkGroup.selectAll('path.link-path')
-    .classed('highlighted-out', link => {
-      if (!selectedNodeId) return false;
-      const split = isBidirSplit(link);
-      // 非スプリット双方向プライマリは highlighted-bidir を使う
-      if (biDirPrimarySet.has(link.id) && !split) return false;
-      return getLinkSourceId(link) === selectedNodeId;
-    })
-    .classed('highlighted-in', link => {
-      if (!selectedNodeId) return false;
-      const split = isBidirSplit(link);
-      if (biDirPrimarySet.has(link.id) && !split) return false;
-      return getLinkTargetId(link) === selectedNodeId;
-    })
-    .classed('highlighted-bidir', link => {
-      if (!selectedNodeId || !biDirPrimarySet.has(link.id)) return false;
-      if (isBidirSplit(link)) return false; // スプリット時は out/in に委ねる
-      return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
-    })
-    .classed('link-bidir-secondary-visible', link => {
-      if (!biDirSecondarySet.has(link.id)) return false;
-      return isBidirSplit(link);
-    })
-    .attr('marker-start', link => {
-      if (!biDirPrimarySet.has(link.id)) return null;
-      return isBidirSplit(link) ? null : 'url(#arrow-bidir-start)';
-    });
-
-  // スプリット時はジオメトリが変わるのでパスとラベル位置を再描画
+  // スプリット状態が変わるとジオメトリも変わるので常にキャッシュをクリア
   geometryCache.clear();
-  linkGroup.selectAll('path.link-path').attr('d', link => computePath(link));
 
-  labelGroup.selectAll('text.link-label')
-    .classed('link-bidir-secondary-visible', link => {
-      if (!biDirSecondarySet.has(link.id)) return false;
-      return isBidirSplit(link);
-    })
-    .classed('highlighted', link => {
-      if (!selectedNodeId) return false;
-      return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
-    })
-    .classed('highlighted-out', link => {
-      if (!selectedNodeId) return false;
-      const split = isBidirSplit(link);
-      if (biDirPrimarySet.has(link.id) && !split) return false;
-      return getLinkSourceId(link) === selectedNodeId;
-    })
-    .classed('highlighted-in', link => {
-      if (!selectedNodeId) return false;
-      const split = isBidirSplit(link);
-      if (biDirPrimarySet.has(link.id) && !split) return false;
-      return getLinkTargetId(link) === selectedNodeId;
-    })
-    .classed('highlighted-bidir', link => {
-      if (!selectedNodeId || !biDirPrimarySet.has(link.id)) return false;
-      if (isBidirSplit(link)) return false;
-      return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
-    })
-    .attr('transform', link => {
-      const point = getLabelMidpoint(link);
-      return `translate(${point.x},${point.y})`;
-    });
+  if (!usePixiRenderer) {
+    // SVG モードのみ: DOM クラス・パス・ラベル位置を更新
+    const connectedIds = getConnectedNodeIds(selectedNodeId);
 
-  svg.classed('selection-active', Boolean(selectedNodeId));
+    nodeGroup.selectAll('g.node-group')
+      .classed('selected',  node => node.id === selectedNodeId)
+      .classed('connected', node => connectedIds.has(node.id));
+
+    linkGroup.selectAll('path.link-path')
+      .classed('highlighted-out', link => {
+        if (!selectedNodeId) return false;
+        const split = isBidirSplit(link);
+        // 非スプリット双方向プライマリは highlighted-bidir を使う
+        if (biDirPrimarySet.has(link.id) && !split) return false;
+        return getLinkSourceId(link) === selectedNodeId;
+      })
+      .classed('highlighted-in', link => {
+        if (!selectedNodeId) return false;
+        const split = isBidirSplit(link);
+        if (biDirPrimarySet.has(link.id) && !split) return false;
+        return getLinkTargetId(link) === selectedNodeId;
+      })
+      .classed('highlighted-bidir', link => {
+        if (!selectedNodeId || !biDirPrimarySet.has(link.id)) return false;
+        if (isBidirSplit(link)) return false; // スプリット時は out/in に委ねる
+        return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
+      })
+      .classed('link-bidir-secondary-visible', link => {
+        if (!biDirSecondarySet.has(link.id)) return false;
+        return isBidirSplit(link);
+      })
+      .attr('marker-start', link => {
+        if (!biDirPrimarySet.has(link.id)) return null;
+        return isBidirSplit(link) ? null : 'url(#arrow-bidir-start)';
+      });
+
+    linkGroup.selectAll('path.link-path').attr('d', link => computePath(link));
+
+    labelGroup.selectAll('text.link-label')
+      .classed('link-bidir-secondary-visible', link => {
+        if (!biDirSecondarySet.has(link.id)) return false;
+        return isBidirSplit(link);
+      })
+      .classed('highlighted', link => {
+        if (!selectedNodeId) return false;
+        return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
+      })
+      .classed('highlighted-out', link => {
+        if (!selectedNodeId) return false;
+        const split = isBidirSplit(link);
+        if (biDirPrimarySet.has(link.id) && !split) return false;
+        return getLinkSourceId(link) === selectedNodeId;
+      })
+      .classed('highlighted-in', link => {
+        if (!selectedNodeId) return false;
+        const split = isBidirSplit(link);
+        if (biDirPrimarySet.has(link.id) && !split) return false;
+        return getLinkTargetId(link) === selectedNodeId;
+      })
+      .classed('highlighted-bidir', link => {
+        if (!selectedNodeId || !biDirPrimarySet.has(link.id)) return false;
+        if (isBidirSplit(link)) return false;
+        return getLinkSourceId(link) === selectedNodeId || getLinkTargetId(link) === selectedNodeId;
+      })
+      .attr('transform', link => {
+        const point = getLabelMidpoint(link);
+        return `translate(${point.x},${point.y})`;
+      });
+
+    svg.classed('selection-active', Boolean(selectedNodeId));
+  }
 
   if (selectedNodeId !== null) {
     const node = nodeById(selectedNodeId);
@@ -1471,7 +1474,11 @@ function onNodeClick(event, node) {
 function onNodePointerEnter(event, node) {
   hoveredNodeId = node.id;
   showTooltip(event, node.name);
-  renderVisibleGraph();
+  if (usePixiRenderer) {
+    pixiRenderer.refreshHoverVisuals({ hoveredNodeId, hoveredLinkId });
+  } else {
+    renderVisibleGraph();
+  }
 }
 
 function onNodePointerMove(event, node) {
@@ -1482,7 +1489,11 @@ function onNodePointerMove(event, node) {
 function onNodePointerLeave() {
   hoveredNodeId = null;
   hideTooltip();
-  renderVisibleGraph();
+  if (usePixiRenderer) {
+    pixiRenderer.refreshHoverVisuals({ hoveredNodeId, hoveredLinkId });
+  } else {
+    renderVisibleGraph();
+  }
 }
 
 // ---- 長押しは廃止。ノード編集は詳細パネルのボタンで行う ----
@@ -1496,7 +1507,11 @@ function onNodeRightClick(event, node) {
 function onLinkPointerEnter(event, link) {
   hoveredLinkId = link.id;
   showTooltip(event, link.label || '（ラベルなし）');
-  renderVisibleGraph();
+  if (usePixiRenderer) {
+    pixiRenderer.refreshHoverVisuals({ hoveredNodeId, hoveredLinkId });
+  } else {
+    renderVisibleGraph();
+  }
 }
 
 function onLinkPointerMove(event, link) {
@@ -1507,7 +1522,11 @@ function onLinkPointerMove(event, link) {
 function onLinkPointerLeave() {
   hoveredLinkId = null;
   hideTooltip();
-  renderVisibleGraph();
+  if (usePixiRenderer) {
+    pixiRenderer.refreshHoverVisuals({ hoveredNodeId, hoveredLinkId });
+  } else {
+    renderVisibleGraph();
+  }
 }
 
 function onLinkRightClick(event, link) {
