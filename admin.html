@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>管理画面 | AutoRelationMap</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f4f8;
+      --surface: #ffffff;
+      --border: #d8e2ec;
+      --accent: #1a6fa5;
+      --accent-dim: #e8f2fa;
+      --text: #1a1a2e;
+      --text-sub: #5a6a7e;
+      --danger: #c0392b;
+      --danger-dim: #fdf0ef;
+      --success: #27ae60;
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0 0 48px;
+    }
+
+    /* ---- ヘッダー ---- */
+    #header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    #btn-back {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: var(--text-sub);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #btn-back:hover { background: var(--bg); }
+
+    #header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    #header-map-title {
+      font-size: 13px;
+      color: var(--text-sub);
+      margin-left: auto;
+    }
+
+    /* ---- コンテンツ ---- */
+    #content {
+      max-width: 900px;
+      margin: 32px auto;
+      padding: 0 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* ---- ガード画面 ---- */
+    #auth-guard {
+      text-align: center;
+      padding: 64px 24px;
+      color: var(--text-sub);
+      font-size: 15px;
+    }
+
+    /* ---- セクション ---- */
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-header h2 {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .section-header .count {
+      font-size: 12px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-radius: 20px;
+      padding: 2px 8px;
+      font-weight: 600;
+    }
+
+    /* ---- 参加者リスト ---- */
+    .participant-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .participant-row:last-child { border-bottom: none; }
+
+    .participant-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .participant-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .participant-name {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .participant-id {
+      font-size: 11px;
+      color: var(--text-sub);
+      font-family: monospace;
+    }
+
+    .badge-banned {
+      font-size: 11px;
+      background: var(--danger-dim);
+      color: var(--danger);
+      border-radius: 20px;
+      padding: 2px 8px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge-owner {
+      font-size: 11px;
+      background: #fff8e1;
+      color: #b8860b;
+      border-radius: 20px;
+      padding: 2px 8px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .btn-ban {
+      background: var(--danger-dim);
+      color: var(--danger);
+      border: 1px solid #f5b7b1;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-ban:hover { background: #fbe9e7; }
+
+    .btn-unban {
+      background: #eafaf1;
+      color: var(--success);
+      border: 1px solid #a9dfbf;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-unban:hover { background: #d5f5e3; }
+
+    /* ---- ログテーブル ---- */
+    .log-table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-sub);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--bg); }
+
+    .log-action {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      padding: 2px 7px;
+      white-space: nowrap;
+    }
+
+    .log-action--add    { background: #eafaf1; color: var(--success); }
+    .log-action--delete { background: var(--danger-dim); color: var(--danger); }
+    .log-action--edit   { background: var(--accent-dim); color: var(--accent); }
+
+    .log-time {
+      font-size: 12px;
+      color: var(--text-sub);
+      white-space: nowrap;
+    }
+
+    .log-actor {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .log-target {
+      font-size: 12px;
+      color: var(--text-sub);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ---- ページネーション ---- */
+    #log-pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn-page {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .btn-page:hover { background: var(--bg); }
+    .btn-page:disabled { opacity: 0.4; cursor: default; }
+
+    /* ---- ローダー ---- */
+    .loading { padding: 32px; text-align: center; color: var(--text-sub); font-size: 14px; }
+    .empty   { padding: 24px 20px; text-align: center; color: var(--text-sub); font-size: 13px; }
+  </style>
+</head>
+<body>
+
+  <div id="header">
+    <button id="btn-back">← マップへ戻る</button>
+    <h1>管理画面</h1>
+    <span id="header-map-title"></span>
+  </div>
+
+  <div id="auth-guard" style="display:none">
+    <p>このページを表示する権限がありません。マップのオーナーアカウントでログインしてください。</p>
+  </div>
+
+  <div id="content" style="display:none">
+
+    <!-- 参加者管理 -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2>参加者管理</h2>
+        <span class="count" id="participant-count">…</span>
+      </div>
+      <div id="participants-list"><div class="loading">読み込み中…</div></div>
+    </div>
+
+    <!-- 操作ログ -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2>操作ログ</h2>
+        <span class="count" id="log-count">…</span>
+      </div>
+      <div class="log-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>日時</th>
+              <th>ユーザー</th>
+              <th>操作</th>
+              <th>対象</th>
+            </tr>
+          </thead>
+          <tbody id="logs-tbody"></tbody>
+        </table>
+      </div>
+      <div id="log-pagination"></div>
+    </div>
+
+  </div>
+
+  <script src="/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/supabase-client.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>

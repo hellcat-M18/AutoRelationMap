@@ -19,8 +19,6 @@ const MAX_VIEW_SCALE = 5;
 
 let nodes = [];
 let links = [];
-let nextNodeId = 1;
-let nextLinkId = 1;
 let biDirSet = new Set();
 let biDirPrimarySet = new Set();
 let biDirSecondarySet = new Set();
@@ -532,12 +530,15 @@ function openEditNameDialog(node) {
   document.getElementById('modal-overlay').classList.remove('hidden');
   inputEl.focus();
   inputEl.select();
-  modalCallback = newName => {
+  modalCallback = async newName => {
     if (newName.trim()) {
-      node.name = newName.trim();
-      broadcastOp('node_rename', { id: node.id, name: node.name });
-      scheduleSave();
-      restart({ layout: false, fit: false });
+      if (isHosted()) {
+        await dbUpdateNodeName(node, newName.trim());
+        restart({ layout: false, fit: false });
+      } else {
+        node.name = newName.trim();
+        restart({ layout: false, fit: false });
+      }
     }
     titleEl.textContent = '関係を入力';
     inputEl.placeholder = '例：友人、同僚、ライバル';
@@ -557,22 +558,29 @@ function openEditIconDialog(node) {
     if (!file) return;
     resizeImage(file, async dataUrl => {
       const displayUrl = await uploadIconToStorage(dataUrl);
-      node.dataUrl = displayUrl;
-      broadcastOp('node_icon', { id: node.id, dataUrl: displayUrl });
-      scheduleSave();
-      restart({ layout: false, fit: false });
+      if (isHosted()) {
+        await dbUpdateNodeIcon(node, displayUrl);
+        restart({ layout: false, fit: false });
+      } else {
+        node.dataUrl = displayUrl;
+        restart({ layout: false, fit: false });
+      }
     });
   }, { once: true });
 }
 
-function deleteNode(node) {
-  const targetId = node.id;
-  nodes = nodes.filter(n => n.id !== targetId);
-  links = links.filter(link => getLinkSourceId(link) !== targetId && getLinkTargetId(link) !== targetId);
-  if (selectedNodeId === targetId) selectedNodeId = null;
-  broadcastOp('node_delete', { id: targetId });
-  scheduleSave();
-  restart({ layout: true, fit: true, seed: true });
+async function deleteNode(node) {
+  if (!canEditNode(node)) return;
+  if (isHosted()) {
+    await dbDeleteNode(node);
+    restart({ layout: true, fit: true, seed: true });
+  } else {
+    const targetId = node.id;
+    nodes = nodes.filter(n => n.id !== targetId);
+    links = links.filter(link => getLinkSourceId(link) !== targetId && getLinkTargetId(link) !== targetId);
+    if (selectedNodeId === targetId) selectedNodeId = null;
+    restart({ layout: true, fit: true, seed: true });
+  }
 }
 
 function renderDetailPanel(node) {
@@ -580,12 +588,19 @@ function renderDetailPanel(node) {
   document.getElementById('detail-name').textContent = node.name;
 
   // 詳細パネルのノード編集ボタン（タップで操作できるよう長押し不要にする）
-  document.getElementById('detail-btn-edit-name').onclick = () => openEditNameDialog(node);
-  document.getElementById('detail-btn-edit-icon').onclick = () => openEditIconDialog(node);
-  document.getElementById('detail-btn-delete').onclick = () => {
+  const canEdit = canEditNode(node);
+  const detailBtnEditName = document.getElementById('detail-btn-edit-name');
+  const detailBtnEditIcon = document.getElementById('detail-btn-edit-icon');
+  const detailBtnDelete   = document.getElementById('detail-btn-delete');
+  detailBtnEditName.onclick = () => openEditNameDialog(node);
+  detailBtnEditIcon.onclick = () => openEditIconDialog(node);
+  detailBtnDelete.onclick = () => {
     closeDetailPanel();
     deleteNode(node);
   };
+  detailBtnEditName.classList.toggle('hidden', !canEdit);
+  detailBtnEditIcon.classList.toggle('hidden', !canEdit);
+  detailBtnDelete.classList.toggle('hidden', !canEdit);
 
   // 入力（このノードへ向かう矢印）
   const inList = document.getElementById('detail-in-list');
@@ -640,12 +655,19 @@ function renderDetailPanel(node) {
       const delBtn = document.createElement('button');
       delBtn.className = 'detail-btn-del';
       delBtn.textContent = '削除';
-      delBtn.addEventListener('click', () => {
-        links = links.filter(l => l.id !== link.id);
-        broadcastOp('link_delete', { id: link.id });
-        scheduleSave();
-        restart({ layout: true, fit: false });
+      delBtn.addEventListener('click', async () => {
+        if (isHosted()) {
+          await dbDeleteLink(link);
+          restart({ layout: true, fit: false });
+        } else {
+          links = links.filter(l => l.id !== link.id);
+          restart({ layout: true, fit: false });
+        }
       });
+
+      const canEditThisLink = canEditLink(link);
+      editBtn.classList.toggle('hidden', !canEditThisLink);
+      delBtn.classList.toggle('hidden', !canEditThisLink);
 
       actionsDiv.appendChild(editBtn);
       actionsDiv.appendChild(delBtn);
@@ -1532,11 +1554,14 @@ function onLinkPointerLeave() {
 function onLinkRightClick(event, link) {
   event.preventDefault();
   event.stopPropagation();
+  if (!canEditLink(link)) return;
   if (confirm(`「${link.label || '（ラベルなし）'}」の関係を削除しますか？`)) {
-    links = links.filter(item => item.id !== link.id);
-    broadcastOp('link_delete', { id: link.id });
-    scheduleSave();
-    restart({ layout: true, fit: true });
+    if (isHosted()) {
+      dbDeleteLink(link).then(() => restart({ layout: true, fit: true }));
+    } else {
+      links = links.filter(item => item.id !== link.id);
+      restart({ layout: true, fit: true });
+    }
   }
 }
 
@@ -1584,22 +1609,31 @@ function openLabelModal(source, target, existing) {
   overlay.classList.remove('hidden');
   input.focus();
 
-  modalCallback = label => {
+  modalCallback = async label => {
     if (existing) {
-      existing.label = label;
-      broadcastOp('link_edit', { id: existing.id, label });
-      scheduleSave();
-      restart({ layout: false, fit: false });
+      if (!canEditLink(existing)) { showNotify('このリンクを編集する権限がありません'); return; }
+      if (isHosted()) {
+        await dbUpdateLink(existing, label);
+        restart({ layout: false, fit: false });
+      } else {
+        existing.label = label;
+        restart({ layout: false, fit: false });
+      }
       return;
     }
-
-    const newLink = { id: nextLinkId++, source: source.id, target: target.id, label };
-    links.push(newLink);
-    broadcastOp('link_add', { link: { id: newLink.id, source: source.id, target: target.id, label } });
-    scheduleSave();
-    selectedNodeId = source.id;
-    restart({ layout: true, fit: false });
-    focusNode(nodeById(source.id));
+    if (isHosted()) {
+      const newLink = await dbAddLink({ sourceId: source.id, targetId: target.id, label });
+      if (!newLink) return;
+      selectedNodeId = source.id;
+      restart({ layout: true, fit: false });
+      focusNode(nodeById(source.id));
+    } else {
+      const newLink = { id: nextLinkId++, source: source.id, target: target.id, label };
+      links.push(newLink);
+      selectedNodeId = source.id;
+      restart({ layout: true, fit: false });
+      focusNode(nodeById(source.id));
+    }
   };
 }
 
@@ -1620,6 +1654,10 @@ function showContextMenu(clientX, clientY, node) {
   menu.style.left = `${clientX}px`;
   menu.style.top = `${clientY}px`;
   menu.classList.remove('hidden');
+  const canEdit = canEditNode(node);
+  document.getElementById('ctx-edit-name').classList.toggle('hidden', !canEdit);
+  document.getElementById('ctx-edit-icon').classList.toggle('hidden', !canEdit);
+  document.getElementById('ctx-delete').classList.toggle('hidden', !canEdit);
 }
 
 function hideContextMenu() {
@@ -1763,21 +1801,24 @@ document.getElementById('btn-add-person').addEventListener('click', async () => 
     showNotify('名前を入力してください');
     return;
   }
+  if (isHosted() && !currentUser) {
+    showNotify('ノードを追加するにはログインが必要です');
+    return;
+  }
 
   getSvgSize();
   const rawDataUrl = pendingDataUrl ?? '';
   const displayUrl = rawDataUrl ? await uploadIconToStorage(rawDataUrl) : '';
-  const newNode = {
-    id: nextNodeId++,
-    name,
-    dataUrl: displayUrl,
-    r: R_BASE,
-    x: width / 2 + Math.cos(Math.random() * Math.PI * 2) * 180,
-    y: height / 2 + Math.sin(Math.random() * Math.PI * 2) * 180,
-  };
-  nodes.push(newNode);
-  broadcastOp('node_add', { node: { id: newNode.id, name: newNode.name, dataUrl: newNode.dataUrl, x: newNode.x, y: newNode.y } });
-  scheduleSave();
+  const x = width / 2 + Math.cos(Math.random() * Math.PI * 2) * 180;
+  const y = height / 2 + Math.sin(Math.random() * Math.PI * 2) * 180;
+
+  if (isHosted()) {
+    const newNode = await dbAddNode({ name, dataUrl: displayUrl, x, y });
+    if (!newNode) return;
+  } else {
+    const newNode = { id: nextNodeId++, name, dataUrl: displayUrl, r: R_BASE, x, y };
+    nodes.push(newNode);
+  }
 
   nameElement.value = '';
   pendingDataUrl = null;
@@ -1902,9 +1943,9 @@ const sb = window.sb ?? null;
 
 let mapId = null;
 let currentUser = null;
-let realtimeChannel = null;
-let saveTimer = null;
-const CLIENT_ID = crypto.randomUUID();
+let mapOwnerIdCache = null;
+let isBanned = false;
+let nextNodeId = 1; // ローカルモード専用
 
 function parseMapId() {
   const m = window.location.pathname.match(
@@ -1917,10 +1958,21 @@ function isHosted() {
   return Boolean(sb && mapId);
 }
 
+function canEditNode(node) {
+  if (!isHosted()) return true;
+  return !isBanned && node.owner_id === currentUser?.id;
+}
+
+function canEditLink(link) {
+  if (!isHosted()) return true;
+  return !isBanned && link.owner_id === currentUser?.id;
+}
+
 function updateAuthUI() {
   const btnLogin  = document.getElementById('btn-login');
   const btnLogout = document.getElementById('btn-logout');
   const userLabel = document.getElementById('auth-user-label');
+  const btnAdmin  = document.getElementById('btn-admin');
   if (!btnLogin) return;
   if (currentUser) {
     btnLogin.classList.add('hidden');
@@ -1931,6 +1983,15 @@ function updateAuthUI() {
     btnLogin.classList.remove('hidden');
     btnLogout.classList.add('hidden');
     userLabel.classList.add('hidden');
+  }
+  if (btnAdmin) {
+    const isOwner = isHosted() && mapOwnerIdCache !== null && mapOwnerIdCache === currentUser?.id;
+    btnAdmin.classList.toggle('hidden', !isOwner);
+  }
+  // ホスト時: ログイン済みのみノード追加を許可
+  if (isHosted()) {
+    const sectionAdd = document.getElementById('section-add');
+    if (sectionAdd) sectionAdd.classList.toggle('hidden', !currentUser || isBanned);
   }
 }
 
@@ -1944,56 +2005,161 @@ function updateMapModeUI() {
     sectionJson.classList.remove('hidden');
     sectionMapMode.classList.add('hidden');
   }
+  updateAuthUI();
+}
+
+// ---- DB データ正規化ヘルパー ----
+function normalizeNodesFromDB(rows, existingPositions = new Map()) {
+  return (rows ?? []).map(n => ({
+    id: n.id,
+    owner_id: n.owner_id,
+    name: n.name,
+    dataUrl: n.data_url,
+    r: R_BASE,
+    ...(existingPositions.get(n.id) ?? {}),
+  }));
+}
+
+function normalizeLinksFromDB(rows) {
+  return (rows ?? []).map(l => ({
+    id: l.id,
+    owner_id: l.owner_id,
+    source: l.source_node_id,
+    target: l.target_node_id,
+    label: l.label,
+  }));
 }
 
 async function loadMapFromDB(id) {
-  const { data, error } = await sb.from('maps').select('data').eq('id', id).single();
-  if (error || !data) {
+  const [mapResult, nodesResult, linksResult] = await Promise.all([
+    sb.from('maps').select('owner_id').eq('id', id).single(),
+    sb.from('nodes').select('id, owner_id, name, data_url').eq('map_id', id),
+    sb.from('links').select('id, owner_id, source_node_id, target_node_id, label').eq('map_id', id),
+  ]);
+
+  if (mapResult.error) {
     showNotify('マップが見つかりません');
     return;
   }
-  const mapData = data.data;
-  nodes      = (mapData.nodes ?? []).map(n => ({ ...n, r: R_BASE }));
-  links      = (mapData.links ?? []).map(l => ({ ...l }));
-  nextNodeId = mapData.meta?.nextNodeId ?? (nodes.length ? Math.max(...nodes.map(n => n.id)) + 1 : 1);
-  nextLinkId = mapData.meta?.nextLinkId ?? (links.length ? Math.max(...links.map(l => l.id)) + 1 : 1);
+
+  mapOwnerIdCache = mapResult.data?.owner_id ?? null;
+  nodes = normalizeNodesFromDB(nodesResult.data ?? []);
+  links = normalizeLinksFromDB(linksResult.data ?? []);
   seedPivotMdsPositions();
   restart({ layout: true, fit: true, seed: true });
+  updateAuthUI();
 }
 
-function buildSaveData() {
-  return {
-    nodes: nodes.map(n => ({ id: n.id, name: n.name, dataUrl: n.dataUrl ?? '' })),
-    links: links.map(l => ({
-      id: l.id,
-      source: getLinkSourceId(l),
-      target: getLinkTargetId(l),
-      label: l.label,
-    })),
-    meta: { nextNodeId, nextLinkId },
-  };
+// 操作後にDBから再取得してローカルを更新（他ユーザーの変更も取り込む）
+async function reloadMapFromDB(newNodePositions = new Map()) {
+  if (!mapId) return;
+  const existingPositions = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+  for (const [id, pos] of newNodePositions) existingPositions.set(id, pos);
+
+  const [nodesResult, linksResult] = await Promise.all([
+    sb.from('nodes').select('id, owner_id, name, data_url').eq('map_id', mapId),
+    sb.from('links').select('id, owner_id, source_node_id, target_node_id, label').eq('map_id', mapId),
+  ]);
+
+  nodes = normalizeNodesFromDB(nodesResult.data ?? [], existingPositions);
+  links = normalizeLinksFromDB(linksResult.data ?? []);
 }
 
-async function saveMapToDB() {
-  if (!isHosted()) return;
-  await sb.from('maps')
-    .update({ data: buildSaveData(), updated_at: new Date().toISOString() })
-    .eq('id', mapId);
+// ---- ログ書き込み ----
+async function writeLog(action, targetName) {
+  if (!isHosted() || !currentUser) return;
+  sb.from('map_logs').insert({
+    map_id: mapId,
+    actor_id: currentUser.id,
+    actor_name: currentUser.user_metadata?.full_name || currentUser.email || '',
+    action,
+    target_name: targetName,
+  });
 }
 
-function scheduleSave() {
-  if (!isHosted()) return;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveMapToDB, 500);
+// ---- DB CRUD ----
+async function dbAddNode({ name, dataUrl, x, y }) {
+  if (!currentUser) { showNotify('ログインが必要です'); return null; }
+  if (isBanned) { showNotify('このマップへの書き込みが制限されています'); return null; }
+  const id = crypto.randomUUID();
+  const { error } = await sb.from('nodes').insert({
+    id, map_id: mapId, owner_id: currentUser.id, name, data_url: dataUrl,
+  });
+  if (error) { showNotify('ノードの追加に失敗しました'); return null; }
+  writeLog('node_add', name);
+  await reloadMapFromDB(new Map([[id, { x, y }]]));
+  return nodeById(id);
+}
+
+async function dbUpdateNodeName(node, newName) {
+  const { error } = await sb.from('nodes').update({ name: newName }).eq('id', node.id);
+  if (error) { showNotify('更新に失敗しました'); return; }
+  writeLog('node_rename', newName);
+  await reloadMapFromDB();
+}
+
+async function dbUpdateNodeIcon(node, dataUrl) {
+  const { error } = await sb.from('nodes').update({ data_url: dataUrl }).eq('id', node.id);
+  if (error) { showNotify('更新に失敗しました'); return; }
+  writeLog('node_icon', node.name);
+  await reloadMapFromDB();
+}
+
+async function dbDeleteNode(node) {
+  const { error } = await sb.from('nodes').delete().eq('id', node.id);
+  if (error) { showNotify('削除に失敗しました'); return; }
+  writeLog('node_delete', node.name);
+  if (selectedNodeId === node.id) selectedNodeId = null;
+  await reloadMapFromDB();
+}
+
+async function dbAddLink({ sourceId, targetId, label }) {
+  if (!currentUser) { showNotify('ログインが必要です'); return null; }
+  if (isBanned) { showNotify('このマップへの書き込みが制限されています'); return null; }
+  const id = crypto.randomUUID();
+  const { error } = await sb.from('links').insert({
+    id, map_id: mapId, owner_id: currentUser.id,
+    source_node_id: sourceId, target_node_id: targetId, label,
+  });
+  if (error) { showNotify('リンクの追加に失敗しました'); return null; }
+  const srcName = nodeById(sourceId)?.name ?? '';
+  const tgtName = nodeById(targetId)?.name ?? '';
+  writeLog('link_add', `${srcName} → ${tgtName}`);
+  await reloadMapFromDB();
+  return links.find(l => l.id === id) ?? null;
+}
+
+async function dbUpdateLink(link, label) {
+  const { error } = await sb.from('links').update({ label }).eq('id', link.id);
+  if (error) { showNotify('更新に失敗しました'); return; }
+  writeLog('link_edit', label);
+  await reloadMapFromDB();
+}
+
+async function dbDeleteLink(link) {
+  const { error } = await sb.from('links').delete().eq('id', link.id);
+  if (error) { showNotify('削除に失敗しました'); return; }
+  const srcName = getLinkSourceNode(link)?.name ?? '';
+  const tgtName = getLinkTargetNode(link)?.name ?? '';
+  writeLog('link_delete', `${srcName} → ${tgtName}`);
+  await reloadMapFromDB();
+}
+
+// ---- BAN チェック ----
+async function checkBanStatus() {
+  if (!sb || !currentUser || !mapId) return;
+  const { data } = await sb.from('banned_accounts')
+    .select('id')
+    .eq('map_id', mapId)
+    .eq('banned_user_id', currentUser.id)
+    .maybeSingle();
+  isBanned = Boolean(data);
+  updateAuthUI();
 }
 
 async function createMapInDB() {
-  const savedData = localStorage.getItem('pendingMapData');
-  const mapData   = savedData ? JSON.parse(savedData) : buildSaveData();
-  localStorage.removeItem('pendingMapData');
-
   const { data, error } = await sb.from('maps')
-    .insert({ owner_id: currentUser.id, title: '無題マップ', data: mapData })
+    .insert({ owner_id: currentUser.id, title: '無題マップ' })
     .select('id')
     .single();
 
@@ -2003,28 +2169,55 @@ async function createMapInDB() {
   }
 
   mapId = data.id;
+  mapOwnerIdCache = currentUser.id;
   window.history.pushState({}, '', `/map/${mapId}`);
 
-  // OAuth リダイレクト後に復元したデータを再セット
+  // ローカルに作業中データがあれば DB にマイグレート
+  const savedData = localStorage.getItem('pendingMapData');
+  localStorage.removeItem('pendingMapData');
   if (savedData) {
-    const restored = JSON.parse(savedData);
-    nodes      = (restored.nodes ?? []).map(n => ({ ...n, r: R_BASE }));
-    links      = (restored.links ?? []).map(l => ({ ...l }));
-    nextNodeId = restored.meta?.nextNodeId ?? 1;
-    nextLinkId = restored.meta?.nextLinkId ?? 1;
-    restart({ layout: false, fit: false });
+    try {
+      const restored = JSON.parse(savedData);
+      const nodeIdMap = new Map();
+      for (const n of (restored.nodes ?? [])) {
+        const newId = crypto.randomUUID();
+        nodeIdMap.set(String(n.id), newId);
+        await sb.from('nodes').insert({
+          id: newId, map_id: mapId, owner_id: currentUser.id,
+          name: n.name, data_url: n.dataUrl ?? '',
+        });
+      }
+      for (const l of (restored.links ?? [])) {
+        const srcId = nodeIdMap.get(String(l.source)) ?? String(l.source);
+        const tgtId = nodeIdMap.get(String(l.target)) ?? String(l.target);
+        await sb.from('links').insert({
+          id: crypto.randomUUID(), map_id: mapId, owner_id: currentUser.id,
+          source_node_id: srcId, target_node_id: tgtId, label: l.label ?? '',
+        });
+      }
+    } catch (e) {
+      console.error('pendingMapData migration failed', e);
+    }
   }
 
-  subscribeRealtime(mapId);
+  await loadMapFromDB(mapId);
   updateMapModeUI();
+}
+
+function buildLocalSaveData() {
+  return {
+    nodes: nodes.map(n => ({ id: n.id, name: n.name, dataUrl: n.dataUrl ?? '' })),
+    links: links.map(l => ({
+      id: l.id, source: getLinkSourceId(l), target: getLinkTargetId(l), label: l.label,
+    })),
+  };
 }
 
 async function createNewMap() {
   if (!sb) return;
   if (!currentUser) {
-    // ログイン前に現在の状態を保存しておき、OAuth 後に復元
     sessionStorage.setItem('pendingCreateMap', '1');
-    localStorage.setItem('pendingMapData', JSON.stringify(buildSaveData()));
+    localStorage.setItem('pendingMapData', JSON.stringify(buildLocalSaveData()));
     await sb.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
@@ -2034,78 +2227,11 @@ async function createNewMap() {
   await createMapInDB();
 }
 
-function subscribeRealtime(id) {
-  if (realtimeChannel) sb.removeChannel(realtimeChannel);
-  realtimeChannel = sb.channel(`map:${id}`)
-    .on('broadcast', { event: 'op' }, ({ payload }) => {
-      if (payload.clientId === CLIENT_ID) return;
-      applyRemoteOp(payload);
-    })
-    .subscribe();
-}
-
-function broadcastOp(op, data) {
-  if (!realtimeChannel) return;
-  realtimeChannel.send({
-    type: 'broadcast',
-    event: 'op',
-    payload: { op, ...data, clientId: CLIENT_ID },
-  });
-}
-
-function applyRemoteOp(payload) {
-  const { op } = payload;
-  switch (op) {
-    case 'node_add':
-      if (!nodes.find(n => n.id === payload.node.id)) {
-        nodes.push({ ...payload.node, r: R_BASE });
-        if (payload.node.id >= nextNodeId) nextNodeId = payload.node.id + 1;
-      }
-      break;
-    case 'node_delete':
-      nodes = nodes.filter(n => n.id !== payload.id);
-      links = links.filter(l =>
-        getLinkSourceId(l) !== payload.id && getLinkTargetId(l) !== payload.id
-      );
-      if (selectedNodeId === payload.id) selectedNodeId = null;
-      break;
-    case 'node_rename': {
-      const n = nodeById(payload.id);
-      if (n) n.name = payload.name;
-      break;
-    }
-    case 'node_icon': {
-      const n = nodeById(payload.id);
-      if (n) n.dataUrl = payload.dataUrl;
-      break;
-    }
-    case 'link_add':
-      if (!links.find(l => l.id === payload.link.id)) {
-        links.push({ ...payload.link });
-        if (payload.link.id >= nextLinkId) nextLinkId = payload.link.id + 1;
-      }
-      break;
-    case 'link_delete':
-      links = links.filter(l => l.id !== payload.id);
-      break;
-    case 'link_edit': {
-      const l = links.find(l => l.id === payload.id);
-      if (l) l.label = payload.label;
-      break;
-    }
-    default: break;
-  }
-  const needsLayout =
-    op === 'node_add' || op === 'node_delete' ||
-    op === 'link_add' || op === 'link_delete';
-  restart({ layout: needsLayout, fit: false });
-}
-
 async function uploadIconToStorage(dataUrl) {
   if (!isHosted()) return dataUrl;
   try {
     const blob = await fetch(dataUrl).then(r => r.blob());
-    const path = `${mapId}/${CLIENT_ID}-${Date.now()}.png`;
+    const path = `${mapId}/${crypto.randomUUID()}.png`;
     const { error } = await sb.storage.from('icons').upload(path, blob, { contentType: 'image/png' });
     if (error) return dataUrl;
     return sb.storage.from('icons').getPublicUrl(path).data.publicUrl;
@@ -2125,7 +2251,7 @@ document.getElementById('btn-login')?.addEventListener('click', async () => {
   if (!sb) return;
   await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin },
+    options: { redirectTo: window.location.href },
   });
 });
 
@@ -2136,10 +2262,13 @@ document.getElementById('btn-logout')?.addEventListener('click', async () => {
 
 document.getElementById('btn-create-map')?.addEventListener('click', createNewMap);
 document.getElementById('btn-copy-share')?.addEventListener('click', copyShareLink);
+document.getElementById('btn-admin')?.addEventListener('click', () => {
+  if (!mapId) return;
+  window.location.href = `/map/${mapId}/admin`;
+});
 
 // ---- 初期化 ----
 getSvgSize();
-// #map-container のサイズ変化（詳細パネル開閉など）に追従してPixiキャンバスをリサイズ
 if (typeof ResizeObserver !== 'undefined') {
   new ResizeObserver(() => { getSvgSize(); }).observe(document.getElementById(MAP_CONTAINER_ID));
 }
@@ -2162,7 +2291,7 @@ if (sb) {
 
   mapId = parseMapId();
   if (mapId) {
-    loadMapFromDB(mapId).then(() => subscribeRealtime(mapId));
+    loadMapFromDB(mapId).then(() => checkBanStatus());
     updateMapModeUI();
   }
 }

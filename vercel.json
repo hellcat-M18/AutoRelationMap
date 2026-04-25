@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/config.js",       "destination": "/api/config" },
+    { "source": "/map/:id/admin",   "destination": "/api/map-admin/:id" },
     { "source": "/map/:id",         "destination": "/api/map/:id" }
   ],
   "redirects": [
