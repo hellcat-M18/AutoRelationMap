@@ -2218,9 +2218,10 @@ async function createNewMap() {
   if (!currentUser) {
     sessionStorage.setItem('pendingCreateMap', '1');
     localStorage.setItem('pendingMapData', JSON.stringify(buildLocalSaveData()));
+    await sb.auth.signOut({ scope: 'local' });
     await sb.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: window.location.origin + window.location.pathname },
     });
     return;
   }
@@ -2250,9 +2251,11 @@ function copyShareLink() {
 // ---- 認証 UI イベント ----
 document.getElementById('btn-login')?.addEventListener('click', async () => {
   if (!sb) return;
+  // 古い PKCE セッション情報をクリアしてからフロー開始
+  await sb.auth.signOut({ scope: 'local' });
   await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.href },
+    options: { redirectTo: window.location.origin + window.location.pathname },
   });
 });
 
