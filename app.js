@@ -2159,7 +2159,7 @@ async function checkBanStatus() {
   updateAuthUI();
 }
 
-async function createMapInDB() {
+async function createMapInDB(localData) {
   const { data, error } = await sb.from('maps')
     .insert({ owner_id: currentUser.id, title: '無題マップ' })
     .select('id')
@@ -2176,12 +2176,16 @@ async function createMapInDB() {
   window.history.pushState({}, '', `/map/${mapId}`);
 
   // ローカルに作業中データがあれば DB にマイグレート
-  const savedData = localStorage.getItem('pendingMapData');
-  console.log('[createMapInDB] pendingMapData:', savedData ? JSON.parse(savedData) : null);
+  // localData: ログイン済みの場合は直接渡す。未ログイン→OAuth後は localStorage から読む
+  let restored = localData ?? null;
+  if (!restored) {
+    const savedData = localStorage.getItem('pendingMapData');
+    if (savedData) restored = JSON.parse(savedData);
+  }
   localStorage.removeItem('pendingMapData');
-  if (savedData) {
+  console.log('[createMapInDB] migration data:', restored);
+  if (restored) {
     try {
-      const restored = JSON.parse(savedData);
       const nodeIdMap = new Map();
       for (const n of (restored.nodes ?? [])) {
         const newId = crypto.randomUUID();
@@ -2222,9 +2226,10 @@ function buildLocalSaveData() {
 
 async function createNewMap() {
   if (!sb) return;
+  const currentData = buildLocalSaveData();
   if (!currentUser) {
     sessionStorage.setItem('pendingCreateMap', '1');
-    localStorage.setItem('pendingMapData', JSON.stringify(buildLocalSaveData()));
+    localStorage.setItem('pendingMapData', JSON.stringify(currentData));
     await sb.auth.signOut({ scope: 'local' });
     await sb.auth.signInWithOAuth({
       provider: 'google',
@@ -2232,7 +2237,7 @@ async function createNewMap() {
     });
     return;
   }
-  await createMapInDB();
+  await createMapInDB(currentData);
 }
 
 async function uploadIconToStorage(dataUrl) {
