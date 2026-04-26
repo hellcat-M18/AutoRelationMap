@@ -298,4 +298,7 @@ function escHtml(str) {
 }
 
 // ---- 起動 ----
-init();
+init().catch(err => {
+  console.error('[admin] init error:', err);
+  showGuard(`エラーが発生しました: ${err?.message ?? err}`);
+});
