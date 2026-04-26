@@ -2069,13 +2069,14 @@ async function reloadMapFromDB(newNodePositions = new Map()) {
 // ---- ログ書き込み ----
 async function writeLog(action, targetName) {
   if (!isHosted() || !currentUser) return;
-  sb.from('map_logs').insert({
+  const { error } = await sb.from('map_logs').insert({
     map_id: mapId,
     actor_id: currentUser.id,
     actor_name: currentUser.user_metadata?.full_name || currentUser.email || '',
     action,
     target_name: targetName,
   });
+  if (error) console.error('[writeLog] failed:', error);
 }
 
 // ---- DB CRUD ----
