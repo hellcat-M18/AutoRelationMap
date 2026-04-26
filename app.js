@@ -2164,6 +2164,7 @@ async function createMapInDB() {
     .single();
 
   if (error || !data) {
+    console.error('[createMapInDB] maps insert failed:', error);
     showNotify('マップの作成に失敗しました');
     return;
   }
@@ -2174,6 +2175,7 @@ async function createMapInDB() {
 
   // ローカルに作業中データがあれば DB にマイグレート
   const savedData = localStorage.getItem('pendingMapData');
+  console.log('[createMapInDB] pendingMapData:', savedData ? JSON.parse(savedData) : null);
   localStorage.removeItem('pendingMapData');
   if (savedData) {
     try {
@@ -2182,19 +2184,22 @@ async function createMapInDB() {
       for (const n of (restored.nodes ?? [])) {
         const newId = crypto.randomUUID();
         nodeIdMap.set(String(n.id), newId);
-        await sb.from('nodes').insert({
+        const { error: ne } = await sb.from('nodes').insert({
           id: newId, map_id: mapId, owner_id: currentUser.id,
           name: n.name, data_url: n.dataUrl ?? '',
         });
+        if (ne) console.error('[createMapInDB] node insert failed:', ne, n);
       }
       for (const l of (restored.links ?? [])) {
         const srcId = nodeIdMap.get(String(l.source)) ?? String(l.source);
         const tgtId = nodeIdMap.get(String(l.target)) ?? String(l.target);
-        await sb.from('links').insert({
+        const { error: le } = await sb.from('links').insert({
           id: crypto.randomUUID(), map_id: mapId, owner_id: currentUser.id,
           source_node_id: srcId, target_node_id: tgtId, label: l.label ?? '',
         });
+        if (le) console.error('[createMapInDB] link insert failed:', le, l);
       }
+      console.log('[createMapInDB] migration done, nodes:', restored.nodes?.length, 'links:', restored.links?.length);
     } catch (e) {
       console.error('pendingMapData migration failed', e);
     }
