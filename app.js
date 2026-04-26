@@ -1946,6 +1946,7 @@ let currentUser = null;
 let mapOwnerIdCache = null;
 let isBanned = false;
 let nextNodeId = 1; // ローカルモード専用
+let nextLinkId = 1; // ローカルモード専用
 
 function parseMapId() {
   const m = window.location.pathname.match(
