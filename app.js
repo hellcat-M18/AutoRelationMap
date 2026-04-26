@@ -2183,7 +2183,6 @@ async function createMapInDB(localData) {
     if (savedData) restored = JSON.parse(savedData);
   }
   localStorage.removeItem('pendingMapData');
-  console.log('[createMapInDB] migration data:', restored);
   if (restored) {
     try {
       const nodeIdMap = new Map();
@@ -2205,7 +2204,6 @@ async function createMapInDB(localData) {
         });
         if (le) console.error('[createMapInDB] link insert failed:', le, l);
       }
-      console.log('[createMapInDB] migration done, nodes:', restored.nodes?.length, 'links:', restored.links?.length);
     } catch (e) {
       console.error('pendingMapData migration failed', e);
     }

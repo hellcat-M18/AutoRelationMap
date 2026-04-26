@@ -24,10 +24,7 @@ let logTotal = 0;
 
 // ---- 初期化 ----
 async function init() {
-  console.log('[admin] init start');
-
   if (!sb) {
-    console.log('[admin] sb is null');
     showGuard('Supabase が設定されていません。');
     return;
   }
@@ -36,9 +33,8 @@ async function init() {
   const m = window.location.pathname.match(
     /^\/map\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/admin$/i
   );
-  if (!m) { console.log('[admin] invalid URL:', window.location.pathname); showGuard('無効な URL です。'); return; }
+  if (!m) { showGuard('無効な URL です。'); return; }
   mapId = m[1];
-  console.log('[admin] mapId:', mapId);
 
   document.getElementById('btn-back').addEventListener('click', () => {
     window.location.href = `/map/${mapId}`;
@@ -47,7 +43,6 @@ async function init() {
   // セッション確認
   const { data: { session } } = await sb.auth.getSession();
   currentUser = session?.user ?? null;
-  console.log('[admin] currentUser:', currentUser?.id ?? 'null');
   if (!currentUser) { showGuard('ログインが必要です。'); return; }
 
   // マップ所有者確認
@@ -56,7 +51,6 @@ async function init() {
     .eq('id', mapId)
     .single();
 
-  console.log('[admin] mapData:', mapData, 'mapError:', mapError);
   if (mapError || !mapData) { showGuard('マップが見つかりません。'); return; }
   if (mapData.owner_id !== currentUser.id) { showGuard('このマップの管理者権限がありません。'); return; }
 
@@ -65,11 +59,9 @@ async function init() {
   document.title = `管理画面 – ${mapData.title || '無題マップ'} | AutoRelationMap`;
 
   // コンテンツ表示
-  console.log('[admin] showing content');
   document.getElementById('content').style.display = 'flex';
 
   await loadAll();
-  console.log('[admin] init complete');
 }
 
 function showGuard(msg) {
