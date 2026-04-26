@@ -100,7 +100,8 @@ async function loadParticipants() {
   const { data: logNames } = await sb.from('map_logs')
     .select('actor_id, actor_name')
     .eq('map_id', mapId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(200);
 
   const nameMap = new Map();
   for (const row of (logNames ?? [])) {

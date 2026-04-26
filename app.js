@@ -2088,7 +2088,7 @@ async function dbAddNode({ name, dataUrl, x, y }) {
     id, map_id: mapId, owner_id: currentUser.id, name, data_url: dataUrl,
   });
   if (error) { showNotify('ノードの追加に失敗しました'); return null; }
-  writeLog('node_add', name);
+  await writeLog('node_add', name);
   await reloadMapFromDB(new Map([[id, { x, y }]]));
   return nodeById(id);
 }
@@ -2096,21 +2096,21 @@ async function dbAddNode({ name, dataUrl, x, y }) {
 async function dbUpdateNodeName(node, newName) {
   const { error } = await sb.from('nodes').update({ name: newName }).eq('id', node.id);
   if (error) { showNotify('更新に失敗しました'); return; }
-  writeLog('node_rename', newName);
+  await writeLog('node_rename', newName);
   await reloadMapFromDB();
 }
 
 async function dbUpdateNodeIcon(node, dataUrl) {
   const { error } = await sb.from('nodes').update({ data_url: dataUrl }).eq('id', node.id);
   if (error) { showNotify('更新に失敗しました'); return; }
-  writeLog('node_icon', node.name);
+  await writeLog('node_icon', node.name);
   await reloadMapFromDB();
 }
 
 async function dbDeleteNode(node) {
   const { error } = await sb.from('nodes').delete().eq('id', node.id);
   if (error) { showNotify('削除に失敗しました'); return; }
-  writeLog('node_delete', node.name);
+  await writeLog('node_delete', node.name);
   if (selectedNodeId === node.id) selectedNodeId = null;
   await reloadMapFromDB();
 }
@@ -2126,7 +2126,7 @@ async function dbAddLink({ sourceId, targetId, label }) {
   if (error) { showNotify('リンクの追加に失敗しました'); return null; }
   const srcName = nodeById(sourceId)?.name ?? '';
   const tgtName = nodeById(targetId)?.name ?? '';
-  writeLog('link_add', `${srcName} → ${tgtName}`);
+  await writeLog('link_add', `${srcName} → ${tgtName}`);
   await reloadMapFromDB();
   return links.find(l => l.id === id) ?? null;
 }
@@ -2134,7 +2134,7 @@ async function dbAddLink({ sourceId, targetId, label }) {
 async function dbUpdateLink(link, label) {
   const { error } = await sb.from('links').update({ label }).eq('id', link.id);
   if (error) { showNotify('更新に失敗しました'); return; }
-  writeLog('link_edit', label);
+  await writeLog('link_edit', label);
   await reloadMapFromDB();
 }
 
@@ -2143,7 +2143,7 @@ async function dbDeleteLink(link) {
   if (error) { showNotify('削除に失敗しました'); return; }
   const srcName = getLinkSourceNode(link)?.name ?? '';
   const tgtName = getLinkTargetNode(link)?.name ?? '';
-  writeLog('link_delete', `${srcName} → ${tgtName}`);
+  await writeLog('link_delete', `${srcName} → ${tgtName}`);
   await reloadMapFromDB();
 }
 
@@ -2180,7 +2180,9 @@ async function createMapInDB(localData) {
   let restored = localData ?? null;
   if (!restored) {
     const savedData = localStorage.getItem('pendingMapData');
-    if (savedData) restored = JSON.parse(savedData);
+    if (savedData) {
+      try { restored = JSON.parse(savedData); } catch { /* 破損データは無視 */ }
+    }
   }
   localStorage.removeItem('pendingMapData');
   if (restored) {
